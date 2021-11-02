@@ -7,6 +7,10 @@ using Superpower.Parsers;
 
 namespace PromQL.Parser
 {
+    /// <summary>
+    /// Converts streams of characters into <see cref="PromToken"/>s. These tokens are then consumed by the <see cref="Parser"/>
+    /// to build up the abstract syntax tree.
+    /// </summary>
     public class Tokenizer : Tokenizer<PromToken>
     {
         private static Dictionary<string, PromToken> KeywordsToTokens = new (StringComparer.OrdinalIgnoreCase)
@@ -16,20 +20,6 @@ namespace PromQL.Parser
             ["or"] =      PromToken.LOR,
             ["unless"] =  PromToken.LUNLESS,
             ["atan2"] =   PromToken.ATAN2,
-
-            // Aggregators
-            ["sum"] =           PromToken.SUM,
-            ["avg"] =           PromToken.AVG,
-            ["count"] =         PromToken.COUNT,
-            ["min"] =           PromToken.MIN,
-            ["max"] =           PromToken.MAX,
-            ["group"] =         PromToken.GROUP,
-            ["stddev"] =        PromToken.STDDEV,
-            ["stdvar"] =        PromToken.STDVAR,
-            ["topk"] =          PromToken.TOPK,
-            ["bottomk"] =       PromToken.BOTTOMK,
-            ["count_values"] =  PromToken.COUNT_VALUES,
-            ["quantile"] =      PromToken.QUANTILE,
 
             // Keywords
             ["offset"] =       PromToken.OFFSET,
@@ -41,6 +31,7 @@ namespace PromQL.Parser
             ["group_right"] =  PromToken.GROUP_RIGHT,
             ["bool"] =         PromToken.BOOL,
             
+            // TODO support inf/ nan
             ["inf"] =          PromToken.NUMBER,
             ["nan"] =          PromToken.NUMBER
 
@@ -86,17 +77,19 @@ namespace PromQL.Parser
             from close in Character.EqualTo(quoteChar)
             select new string(content);
 
-        public static TextParser<PromToken> Identifier { get; set; } = Span.MatchedBy(
+        public TextParser<PromToken> Identifier { get; set; } = Span.MatchedBy(
                 Character.Letter.Or(Character.In('_')).IgnoreThen(Character.LetterOrDigit.Or(Character.In('_')).Many())
             )
             .Select(x => PromToken.IDENTIFIER);
         
-        public static TextParser<PromToken> IndentifierOrKeyword { get; set; } = Span.MatchedBy(
+        public TextParser<PromToken> IndentifierOrKeyword { get; set; } = Span.MatchedBy(
             Character.Letter.Or(Character.In('_', ':')).IgnoreThen(Character.LetterOrDigit.Or(Character.In('_', ':')).Many())
             )
             .Select(x =>
             {
                 var idOrKeyword = x.ToStringValue();
+                if (Operators.Aggregates.Contains(idOrKeyword))
+                    return PromToken.AGGREGATE_OP;
                 if (KeywordsToTokens.TryGetValue(idOrKeyword, out var keyToken))
                     return keyToken;
                 if (idOrKeyword.Contains(":"))
@@ -105,7 +98,7 @@ namespace PromQL.Parser
                 return PromToken.IDENTIFIER;
             });
         
-        public static TextParser<PromToken> String { get; } = QuotedSting('\'').Or(QuotedSting('"')).Select(_ => PromToken.STRING);
+        public TextParser<PromToken> String { get; set; } = QuotedSting('\'').Or(QuotedSting('"')).Select(_ => PromToken.STRING);
 
         public class Reader
         {

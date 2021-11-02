@@ -63,8 +63,8 @@ namespace PromQL.Parser.Tests
         [TestCase("_blah_123", PromToken.IDENTIFIER)]
         [TestCase("blah:blah_123", PromToken.METRIC_IDENTIFIER)]
         [TestCase(":blah:blah_123", PromToken.METRIC_IDENTIFIER)]
-        [TestCase("avg", PromToken.AVG)]
-        [TestCase("SUM", PromToken.SUM)]
+        [TestCase("avg", PromToken.AGGREGATE_OP)]
+        [TestCase("SUM", PromToken.AGGREGATE_OP)]
         public void Identifier(string input, PromToken expected)
         {
             var tokens = new Tokenizer().Tokenize(input);

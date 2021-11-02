@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Immutable;
+using System.Linq;
+using System.Text;
 
 namespace PromQL.Parser
 {
     /// <summary>
     /// Base of all PromQL syntactic components.
     /// </summary>
-    public interface PromQlNode
+    public interface IPromQlNode
     {
         string ToPromQl();
     }
@@ -14,28 +16,22 @@ namespace PromQL.Parser
     /// <summary>
     /// Root of all valid PromQL expressions.
     /// </summary>
-    public interface Expr{}
+    public interface Expr : IPromQlNode {}
 
-    /// <summary>
-    /// Describes the cardinality relationship of two Vectors in a binary operation.
-    /// </summary>
-    public enum VectorMatchCardinality
-    {
-        OneToOne,
-        ManyToOne,
-        OneToMany
-    }
 
     /// <summary>
     /// Represents an aggregation operation on a Vector.
     /// </summary>
-    /// <param name="Operator">The used aggregation operation.</param>
+    /// <param name="OperatorName">The used aggregation operation.</param>
     /// <param name="Expr">The Vector expression over which is aggregated.</param>
     /// <param name="Param">Parameter used by some aggregators.</param>
     /// <param name="GroupingLabels">The labels by which to group the Vector.</param>
     /// <param name="Without"> Whether to drop the given labels rather than keep them.</param>
-    public record AggregateExpr(Operators.Aggregate Operator, Expr Expr, Expr Param,
-        ImmutableArray<string> GroupingLabels, bool Without) : Expr;
+    public record AggregateExpr(string OperatorName, Expr Expr, Expr Param,
+        ImmutableArray<string> GroupingLabels, bool Without) : Expr
+    {
+        public string ToPromQl() => $"{OperatorName} {(Without ? "without" : "by")} ({string.Join(", ", GroupingLabels)}) ({(Param != null ? string.Join(", ", new []{ Param, Expr}.Select(x => x.ToPromQl())) : Expr.ToPromQl())})";
+    }
 
     /// <summary>
     /// Represents a binary expression between two child expressions.
@@ -44,9 +40,11 @@ namespace PromQL.Parser
     /// <param name="RightHandSide">The right-hand operand of the expression</param>
     /// <param name="Operator">The operation of the expression</param>
     /// <param name="VectorMatching">The matching behavior for the operation to be applied if both operands are Vectors.</param>
-    public record BinaryExpr(Expr LeftHandSide, Expr RightHandSide, Operators.Binary Operator, VectorMatching VectorMatching) : Expr;
-
-    // TODO copy more docos from https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/ast.go
+    public record BinaryExpr(Expr LeftHandSide, Expr RightHandSide, Operators.Binary Operator,
+        VectorMatching VectorMatching) : Expr
+    {
+        public string ToPromQl() => $"{LeftHandSide.ToPromQl()} {Operator.ToPromQl()} {VectorMatching?.ToPromQl()} {RightHandSide.ToPromQl()}";
+    }
 
     /// <summary>
     /// VectorMatching describes how elements from two Vectors in a binary operation are supposed to be matched.
@@ -56,17 +54,20 @@ namespace PromQL.Parser
     /// <param name="On">When true, includes the given label names from matching, rather than excluding them.</param>
     /// <param name="Include">Contains additional labels that should be included in the result from the side with the lower cardinality.</param>
     /// <param name="ReturnBool">If a comparison operator, return 0/1 rather than filtering.</param>
-    public record VectorMatching(VectorMatchCardinality MatchCardinality, ImmutableArray<string> MatchingLabels,
-        bool On, ImmutableArray<string> Include, bool ReturnBool)
+    public record VectorMatching(Operators.VectorMatchCardinality MatchCardinality, ImmutableArray<string> MatchingLabels,
+        bool On, ImmutableArray<string> Include, bool ReturnBool) : IPromQlNode
     {
-        public VectorMatching() : this(VectorMatchCardinality.OneToOne, ImmutableArray<string>.Empty, false,
+        public VectorMatching() : this(Operators.VectorMatchCardinality.OneToOne, ImmutableArray<string>.Empty, false,
             ImmutableArray<string>.Empty, false)
         {
         }
 
-        public VectorMatching(bool returnBool) : this (VectorMatchCardinality.OneToOne, ImmutableArray<string>.Empty, false, ImmutableArray<string>.Empty, returnBool  )
+        public VectorMatching(bool returnBool) : this (Operators.VectorMatchCardinality.OneToOne, ImmutableArray<string>.Empty, false, ImmutableArray<string>.Empty, returnBool  )
         {
         }
+        
+        public string ToPromQl() =>
+            $"{(ReturnBool ? "bool" : "")} {(On ? "on" : "ignoring")} ({string.Join(",", MatchingLabels)})  {MatchCardinality.ToPromQl()} ({string.Join(",", Include)})";
     };
 
     /// <summary>
@@ -74,12 +75,30 @@ namespace PromQL.Parser
     /// </summary>
     /// <param name="Identifier">The function that was called.</param>
     /// <param name="Args">Arguments used in the call.</param>
-    public record FunctionCall(FunctionIdentifier Identifier, ImmutableArray<Expr> Args) : Expr;
-    public record ParenExpression(Expr Expr) : Expr;
-    public record OffsetExpr(Expr Expr, Duration Duration) : Expr;
-    public record MatrixSelector(VectorSelector Vector, Duration Duration) : Expr;
+    public record FunctionCall(string Identifier, ImmutableArray<Expr> Args) : Expr
+    {
+        public string ToPromQl() => $"{Identifier}({string.Join(",", Args.Select(x => x.ToPromQl()))})";
+    }
 
-    public record UnaryExpr(Operators.Unary Operator, Expr Expr) : Expr;
+    public record ParenExpression(Expr Expr) : Expr
+    {
+        public string ToPromQl() => $"({Expr.ToPromQl()})";
+    }
+
+    public record OffsetExpr(Expr Expr, Duration Duration) : Expr
+    {
+        public string ToPromQl() => $"{Expr.ToPromQl()} offset {Duration.ToPromQl()}";
+    }
+
+    public record MatrixSelector(VectorSelector Vector, Duration Duration) : Expr
+    {
+        public string ToPromQl() => $"{Vector.ToPromQl()}[{Duration.ToPromQl()}]";
+    }
+
+    public record UnaryExpr(Operators.Unary Operator, Expr Expr) : Expr
+    {
+        public string ToPromQl() => $"{Operator.ToPromQl()}{Expr.ToPromQl()}";
+    }
     
     public record VectorSelector : Expr
     {
@@ -101,19 +120,59 @@ namespace PromQL.Parser
         
         public MetricIdentifier? MetricIdentifier { get; }
         public LabelMatchers? LabelMatchers { get; }
-    } 
+        
+        public string ToPromQl() => $"{MetricIdentifier?.ToPromQl() ?? ""}{LabelMatchers?.ToPromQl() ?? ""}";
+    }
 
-    public record LabelMatchers(ImmutableArray<LabelMatcher> Matchers);
-    
-    public record LabelMatcher(string LabelName, Operators.Match Operator, StringLiteral Value);
+    public record LabelMatchers(ImmutableArray<LabelMatcher> Matchers) : IPromQlNode
+    {
+        public string ToPromQl() => $"{{{string.Join(", ", Matchers.Select(x => x.ToPromQl()))}}}";
+    }
 
-    public record MetricIdentifier(string Value);
+    public record LabelMatcher(string LabelName, Operators.LabelMatch Operator, StringLiteral Value) : IPromQlNode
+    {
+        public string ToPromQl() => $"{LabelName}{Operator.ToPromQl()}{Value.ToPromQl()}";
+    }
 
-    public record NumberLiteral(double Value) : Expr;
-    
-    public record Duration(TimeSpan Value);
+    public record MetricIdentifier(string Value) : IPromQlNode
+    {
+        public string ToPromQl() => Value;
+    }
 
-    public record StringLiteral(char Quote, string Value) : Expr;
-    
-    public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step) : Expr;
+    public record NumberLiteral(double Value) : Expr
+    {
+        public string ToPromQl() => Value.ToString();
+    }
+
+    public record Duration(TimeSpan Value) : Expr
+    {
+        // TODO test
+        public string ToPromQl()
+        {
+
+            var sb = new StringBuilder();
+            if (Value.Days > 0)
+                sb.Append($"{Value.Days}d");
+            if (Value.Hours > 0)
+                sb.Append($"{Value.Hours}h");
+            if (Value.Minutes > 0)
+                sb.Append($"{Value.Minutes}m");
+            if (Value.Seconds > 0)
+                sb.Append($"{Value.Seconds}s");
+            if (Value.Milliseconds > 0)
+                sb.Append($"{Value.Milliseconds}ms");
+            
+            return sb.ToString();
+        }
+    }
+
+    public record StringLiteral(char Quote, string Value) : Expr
+    {
+        public string ToPromQl() => $"{Quote}{Value}{Quote}";
+    }
+
+    public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step) : Expr
+    {
+        public string ToPromQl() => $"{Expr.ToPromQl()}[{Range.ToPromQl()}:{Step?.ToPromQl() ?? ""}]";
+    }
 }

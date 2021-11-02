@@ -25,7 +25,7 @@ namespace PromQL.Parser
             from id in Token.EqualTo(PromToken.METRIC_IDENTIFIER)
                 // TODO support all function names and keywords here + dedupe logic from LabelIdentifier
                 .Or(Token.EqualTo(PromToken.IDENTIFIER))
-                .Or(Token.Matching<PromToken>(t => AggregateOperatorMap.ContainsKey(t), "aggregate_op"))
+                .Or(Token.EqualTo(PromToken.AGGREGATE_OP).Where(t => Operators.Aggregates.Contains(t.ToStringValue()), "aggregate_op"))
             select new MetricIdentifier(id.ToStringValue());
 
         public static TokenListParser<PromToken, LabelMatchers> LabelMatchers =
@@ -61,7 +61,7 @@ namespace PromQL.Parser
         // TODO see https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/generated_parser.y#L679
         public static TokenListParser<PromToken, string> LabelValueMatcher =
             from id in Token.EqualTo(PromToken.IDENTIFIER)
-                .Or(Token.Matching<PromToken>(t => AggregateOperatorMap.ContainsKey(t), "agg_label_op"))
+                .Or(Token.EqualTo(PromToken.AGGREGATE_OP).Where(x => Operators.Aggregates.Contains(x.ToStringValue())))
                 // TODO must expand these
                 .Or(Token.EqualTo(PromToken.IGNORING))
                 .Or(Token.EqualTo(PromToken.ON))
@@ -74,14 +74,14 @@ namespace PromQL.Parser
             from str in String
             select new LabelMatcher(id, op, (StringLiteral)str);
         
-        public static TokenListParser<PromToken, Operators.Match> MatchOp =
-            Token.EqualTo(PromToken.EQL).Select(_ => Operators.Match.Equal)
+        public static TokenListParser<PromToken, Operators.LabelMatch> MatchOp =
+            Token.EqualTo(PromToken.EQL).Select(_ => Operators.LabelMatch.Equal)
                 .Or(
-                    Token.EqualTo(PromToken.NEQ).Select(_ => Operators.Match.NotEqual)
+                    Token.EqualTo(PromToken.NEQ).Select(_ => Operators.LabelMatch.NotEqual)
                 ).Or(
-                    Token.EqualTo(PromToken.EQL_REGEX).Select(_ => Operators.Match.Regexp)
+                    Token.EqualTo(PromToken.EQL_REGEX).Select(_ => Operators.LabelMatch.Regexp)
                 ).Or(
-                    Token.EqualTo(PromToken.NEQ_REGEX).Select(_ => Operators.Match.NotRegexp)
+                    Token.EqualTo(PromToken.NEQ_REGEX).Select(_ => Operators.LabelMatch.NotRegexp)
                 );
 
         public static TokenListParser<PromToken, NumberLiteral> Number =
@@ -142,29 +142,13 @@ namespace PromQL.Parser
             from e in Parse.Ref(() => Expr.Between(Token.EqualTo(PromToken.LEFT_PAREN), Token.EqualTo(PromToken.RIGHT_PAREN)))
             select new ParenExpression(e);
 
-        private static FunctionIdentifier? LookupFunctionName(string fnName)
-        {
-            var camelCase = Regex.Replace(fnName, "([a-z])_([a-z])", (m) =>
-            {
-                return m.Groups[1].Value + m.Groups[2].Value.ToUpper();
-            });
-            var titleCase = char.ToUpper(camelCase.First()) + camelCase[1..];
-            
-            if (Enum.TryParse<FunctionIdentifier>(titleCase, out var fnId))
-                return fnId;
-
-            return null;
-        }
-        
         public static TokenListParser<PromToken, Expr[]> FunctionArgs = Parse.Ref(() => Expr.ManyDelimitedBy(Token.EqualTo(PromToken.COMMA)))
             .Between(Token.EqualTo(PromToken.LEFT_PAREN), Token.EqualTo(PromToken.RIGHT_PAREN));
         
         public static TokenListParser<PromToken, FunctionCall> FunctionCall =
-            from id in Token.EqualTo(PromToken.IDENTIFIER)
-                .Select(x => LookupFunctionName(x.ToStringValue()))
-                .Where(id => id != null,  $"Unrecognized function name")
+            from id in Token.EqualTo(PromToken.IDENTIFIER).Where(x => Functions.Names.Contains(x.ToStringValue()))
             from args in FunctionArgs
-            select new FunctionCall(id.Value, args.ToImmutableArray());
+            select new FunctionCall(id.ToStringValue(), args.ToImmutableArray());
 
 
         public static TokenListParser<PromToken, ImmutableArray<string>> GroupingLabels =
@@ -181,7 +165,7 @@ namespace PromQL.Parser
             from onOrIgnoring in Token.EqualTo(PromToken.ON).Or(Token.EqualTo(PromToken.IGNORING))
             from onOrIgnoringLabels in GroupingLabels
             select new VectorMatching(
-                VectorMatchCardinality.OneToOne,
+                Operators.VectorMatchCardinality.OneToOne,
                 onOrIgnoringLabels,
                 onOrIgnoring.HasValue && onOrIgnoring.Kind == PromToken.ON,
                 ImmutableArray<string>.Empty,
@@ -205,10 +189,10 @@ namespace PromQL.Parser
                 {
                     MatchCardinality = grp switch
                     {
-                        {HasValue : false} => VectorMatchCardinality.OneToOne,
-                        {Kind: PromToken.GROUP_LEFT} => VectorMatchCardinality.ManyToOne,
-                        {Kind: PromToken.GROUP_RIGHT} => VectorMatchCardinality.OneToMany,
-                        _ => VectorMatchCardinality.OneToOne
+                        {HasValue : false} => Operators.VectorMatchCardinality.OneToOne,
+                        {Kind: PromToken.GROUP_LEFT} => Operators.VectorMatchCardinality.ManyToOne,
+                        {Kind: PromToken.GROUP_RIGHT} => Operators.VectorMatchCardinality.OneToMany,
+                        _ => Operators.VectorMatchCardinality.OneToOne
                     },
                     MatchingLabels = grpLabels
                 }
@@ -244,25 +228,9 @@ namespace PromQL.Parser
         public static TokenListParser<PromToken, BinaryExpr> BinaryExpr =
             from lhs in Parse.Ref(() => ExprNotBinary)
             from op in Token.Matching<PromToken>(x => BinaryOperatorMap.ContainsKey(x), "binary_op")
-            from vm in VectorMatching.OptionalOrDefault(new VectorMatching())
+            from vm in VectorMatching.OptionalOrDefault()
             from rhs in Expr
             select new BinaryExpr(lhs, rhs, BinaryOperatorMap[op.Kind], vm);
-        
-        private static IReadOnlyDictionary<PromToken, Operators.Aggregate> AggregateOperatorMap = new Dictionary<PromToken, Operators.Aggregate>()
-        {
-            [PromToken.AVG] = Operators.Aggregate.Avg,
-            [PromToken.BOTTOMK] = Operators.Aggregate.Bottomk,
-            [PromToken.COUNT] = Operators.Aggregate.Count,
-            [PromToken.COUNT_VALUES] = Operators.Aggregate.CountValues,
-            [PromToken.GROUP] = Operators.Aggregate.Group,
-            [PromToken.MAX] = Operators.Aggregate.Max,
-            [PromToken.MIN] = Operators.Aggregate.Min,
-            [PromToken.QUANTILE] = Operators.Aggregate.Quantile,
-            [PromToken.STDDEV] = Operators.Aggregate.Stddev,
-            [PromToken.STDVAR] = Operators.Aggregate.Stdvar,
-            [PromToken.SUM] = Operators.Aggregate.Sum,
-            [PromToken.TOPK] = Operators.Aggregate.Topk
-        };
 
         public static TokenListParser<PromToken, (bool without, ImmutableArray<string> labels)> AggregateModifier =
             from kind in Token.EqualTo(PromToken.BY)
@@ -271,7 +239,7 @@ namespace PromQL.Parser
             select (kind.Kind == PromToken.WITHOUT, labels);
 
         public static TokenListParser<PromToken, AggregateExpr> AggregateExpr =
-            from op in Token.Matching<PromToken>(t => AggregateOperatorMap.ContainsKey(t), "aggregate_op")
+            from op in Token.EqualTo(PromToken.AGGREGATE_OP).Where(x => Operators.Aggregates.Contains(x.Span.ToStringValue()))
             from argsAndMod in (
                 from args in FunctionArgs
                 from mod in AggregateModifier.OptionalOrDefault((without: false, labels: ImmutableArray<string>.Empty))
@@ -283,7 +251,7 @@ namespace PromQL.Parser
             )
             .Where(x => x.args.Length >= 1, "At least one argument is required for aggregate expressions")
             .Where(x => x.args.Length <= 2, "A maximum of two arguments is supported for aggregate expressions")
-            select new AggregateExpr(AggregateOperatorMap[op.Kind], argsAndMod.args.Length > 1 ? argsAndMod.args[1] : argsAndMod.args[0], argsAndMod.args.Length > 1 ? argsAndMod.args[0] : null, argsAndMod.mod.labels, argsAndMod.mod.without );
+            select new AggregateExpr(op.ToStringValue(), argsAndMod.args.Length > 1 ? argsAndMod.args[1] : argsAndMod.args[0], argsAndMod.args.Length > 1 ? argsAndMod.args[0] : null, argsAndMod.mod.labels, argsAndMod.mod.without );
 
         public static TokenListParser<PromToken, Expr> ExprNotBinary =
              from head in OneOf(
@@ -312,11 +280,6 @@ namespace PromQL.Parser
 
          public static TokenListParser<PromToken, Expr> Expr =
              from head in Parse.Ref(() => BinaryExpr).Cast<PromToken, BinaryExpr, Expr>().Try().Or(ExprNotBinary)
-             // TODO OR together or allow separately? What's the precendence here? Offsetable subquery or subqueried offset?
-             // from offset
-             // from subquery
-             // from offset + subquery
-             // from subquery + offset
              from offsetOrSubquery in OffsetOrSubquery(head).OptionalOrDefault()
              select offsetOrSubquery ?? head;
 
@@ -325,11 +288,11 @@ namespace PromQL.Parser
         /// </summary>
         /// <param name="input"></param>
         /// <returns></returns>
-        public static Expr ParseExpression(string input)
+        public static Expr ParseExpression(string input, Tokenizer tokenizer = null)
         {
-            var t = new Tokenizer();
+            tokenizer ??= new Tokenizer();
             return Expr.Parse(new TokenList<PromToken>(
-                t.Tokenize(input).Where(x => x.Kind != PromToken.COMMENT).ToArray()
+                tokenizer.Tokenize(input).Where(x => x.Kind != PromToken.COMMENT).ToArray()
             ));
         }
         

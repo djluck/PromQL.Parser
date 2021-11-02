@@ -36,121 +36,89 @@ namespace PromQL.Parser
 		[Token] TIMES,
 
 		// Operators
-		[Token(Category = "Operators", Example = "+")]
+		[Token(Category = "Operator", Example = "+")]
 		ADD,
 
-		[Token(Category = "Operators", Example = "/")]
+		[Token(Category = "Operator", Example = "/")]
 		DIV,
 
-		[Token(Category = "Operators", Example = "==")]
+		[Token(Category = "Operator", Example = "==")]
 		EQLC,
 
-		[Token(Category = "Operators", Example = "=~")]
+		[Token(Category = "Operator", Example = "=~")]
 		EQL_REGEX,
 
-		[Token(Category = "Operators", Example = ">=")]
+		[Token(Category = "Operator", Example = ">=")]
 		GTE,
 
-		[Token(Category = "Operators", Example = ">")]
+		[Token(Category = "Operator", Example = ">")]
 		GTR,
 
-		[Token(Category = "Operators")]
+		[Token(Category = "Operator")]
 		LAND,
 
-		[Token(Category = "Operators")]
+		[Token(Category = "Operator")]
 		LOR,
 
-		[Token(Category = "Operators", Example = "<")]
+		[Token(Category = "Operator", Example = "<")]
 		LSS,
 
-		[Token(Category = "Operators", Example = "<=")]
+		[Token(Category = "Operator", Example = "<=")]
 		LTE,
 
-		[Token(Category = "Operators")]
+		[Token(Category = "Operator")]
 		LUNLESS,
 
-		[Token(Category = "Operators", Example = "%")]
+		[Token(Category = "Operator", Example = "%")]
 		MOD,
 
-		[Token(Category = "Operators", Example = "*")]
+		[Token(Category = "Operator", Example = "*")]
 		MUL,
 
-		[Token(Category = "Operators", Example = "!=")]
+		[Token(Category = "Operator", Example = "!=")]
 		NEQ,
 
-		[Token(Category = "Operators", Example = "!~")]
+		[Token(Category = "Operator", Example = "!~")]
 		NEQ_REGEX,
 
-		[Token(Category = "Operators", Example = "^")]
+		[Token(Category = "Operator", Example = "^")]
 		POW,
 
-		[Token(Category = "Operators", Example = "-")]
+		[Token(Category = "Operator", Example = "-")]
 		SUB,
 
-		[Token(Category = "Operators", Example = "@")]
+		[Token(Category = "Operator", Example = "@")]
 		AT,
 
-		[Token(Category = "Operators", Example = "atan2")]
+		[Token(Category = "Operator", Example = "atan2")]
 		ATAN2,
 
 		// Aggregators
-		AVG,
-
-		[Token(Category = "Aggregators")]
-		BOTTOMK,
-
-		[Token(Category = "Aggregators")]
-		COUNT,
-
-		[Token(Category = "Aggregators")]
-		COUNT_VALUES,
-
-		[Token(Category = "Aggregators")]
-		GROUP,
-
-		[Token(Category = "Aggregators")]
-		MAX,
-
-		[Token(Category = "Aggregators")]
-		MIN,
-
-		[Token(Category = "Aggregators")]
-		QUANTILE,
-
-		[Token(Category = "Aggregators")]
-		STDDEV,
-
-		[Token(Category = "Aggregators")]
-		STDVAR,
-
-		[Token(Category = "Aggregators")]
-		SUM,
-
-		[Token(Category = "Aggregators")]
-		TOPK,
+		[Token]
+		AGGREGATE_OP,
 
 		// Keywords
 		BOOL,
 
-		[Token(Category = "Keywords")]
+		[Token(Category = "Keyword")]
 		BY,
 
-		[Token(Category = "Keywords")]
+		[Token(Category = "Keyword")]
 		GROUP_LEFT,
 
-		[Token(Category = "Keywords")]
+		[Token(Category = "Keyword")]
 		GROUP_RIGHT,
 
-		[Token(Category = "Keywords")]
+		[Token(Category = "Keyword")]
 		IGNORING,
 
-		[Token(Category = "Keywords")]
+		[Token(Category = "Keyword")]
 		OFFSET,
 
-		[Token(Category = "Keywords")]
+		[Token(Category = "Keyword")]
 		ON,
 
-		[Token(Category = "Keywords")]
+		[Token(Category = "Keyword")]
 		WITHOUT,
 
 		// Preprocessors

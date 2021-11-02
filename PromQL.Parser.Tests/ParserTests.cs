@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Immutable;
-using System.Reflection.Emit;
 using FluentAssertions;
 using NUnit.Framework;
 using Superpower;
@@ -76,7 +75,7 @@ namespace PromQL.Parser.Tests
             Parse(Parser.LabelMatchers, "{blah=\"my_label\"}")
                 .Should().BeEquivalentTo(new LabelMatchers(new []
                 {
-                    new LabelMatcher("blah", Operators.Match.Equal, new StringLiteral('"', "my_label"))   
+                    new LabelMatcher("blah", Operators.LabelMatch.Equal, new StringLiteral('"', "my_label"))   
                 }.ToImmutableArray()));
         }
 
@@ -86,7 +85,7 @@ namespace PromQL.Parser.Tests
             Parse(Parser.LabelMatchers, "{blah=\"my_label\" , }")
                 .Should().BeEquivalentTo(new LabelMatchers(new[]
                 {
-                    new LabelMatcher("blah", Operators.Match.Equal, new StringLiteral('"', "my_label"))
+                    new LabelMatcher("blah", Operators.LabelMatch.Equal, new StringLiteral('"', "my_label"))
                 }.ToImmutableArray()));
         }
         
@@ -96,10 +95,10 @@ namespace PromQL.Parser.Tests
             Parse(Parser.LabelMatchers, "{ blah=\"my_label\", blah_123 != 'my_label', b123=~'label', b_!~'label' }")
                 .Should().BeEquivalentTo(new LabelMatchers(new []
                 {
-                    new LabelMatcher("blah", Operators.Match.Equal, new StringLiteral('"', "my_label")),
-                    new LabelMatcher("blah_123", Operators.Match.NotEqual, new StringLiteral('\'', "my_label")),
-                    new LabelMatcher("b123", Operators.Match.Regexp, new StringLiteral('\'', "label")),
-                    new LabelMatcher("b_", Operators.Match.NotRegexp, new StringLiteral('\'', "label"))
+                    new LabelMatcher("blah", Operators.LabelMatch.Equal, new StringLiteral('"', "my_label")),
+                    new LabelMatcher("blah_123", Operators.LabelMatch.NotEqual, new StringLiteral('\'', "my_label")),
+                    new LabelMatcher("b123", Operators.LabelMatch.Regexp, new StringLiteral('\'', "label")),
+                    new LabelMatcher("b_", Operators.LabelMatch.NotRegexp, new StringLiteral('\'', "label"))
                 }.ToImmutableArray()));
         }
         
@@ -209,26 +208,32 @@ namespace PromQL.Parser.Tests
 
         [Test]
         public void FunctionCall_Empty() => Parse(Parser.FunctionCall, "time ()")
-            .Should().Be(new FunctionCall(FunctionIdentifier.Time, ImmutableArray<Expr>.Empty));
+            .Should().Be(new FunctionCall("time", ImmutableArray<Expr>.Empty));
+
+        [Test]
+        public void FunctionCall_InvalidFunction()
+        {
+            Assert.Throws<ParseException>(() => Parse(Parser.Expr, "this_doesnt_exist ()"));  
+        }
 
         [Test]
         public void FunctionCall_OneArg() => Parse(Parser.Expr, "abs (1)")
             .Should().BeEquivalentTo(
-                new FunctionCall(FunctionIdentifier.Abs, new Expr[] { new NumberLiteral(1.0) }.ToImmutableArray())
+                new FunctionCall("abs", new Expr[] { new NumberLiteral(1.0) }.ToImmutableArray())
             );
         
         [Test]
         // NOTE: we do not either validate the parameter count or types of functions 
         public void FunctionCall_MultiArg() => Parse(Parser.Expr, "abs (1, 2)")
             .Should().BeEquivalentTo(
-                new FunctionCall(FunctionIdentifier.Abs, new Expr[] { new NumberLiteral(1.0), new NumberLiteral(2.0) }.ToImmutableArray())
+                new FunctionCall("abs", new Expr[] { new NumberLiteral(1.0), new NumberLiteral(2.0) }.ToImmutableArray())
             );
         
         [Test]
         // NOTE: we do not either validate the parameter count or types of functions 
         public void FunctionCall_SnakeCase() => Parse(Parser.Expr, "absent_over_time (metric_name )")
             .Should().BeEquivalentTo(
-                new FunctionCall(FunctionIdentifier.AbsentOverTime, new Expr[] { new VectorSelector(new MetricIdentifier("metric_name")) }.ToImmutableArray())
+                new FunctionCall("absent_over_time", new Expr[] { new VectorSelector(new MetricIdentifier("metric_name")) }.ToImmutableArray())
             );
 
         [Test]
@@ -288,7 +293,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void VectorMatching_Bool() => Parse(Parser.VectorMatching, "bool")
             .Should().BeEquivalentTo(new VectorMatching(
-                VectorMatchCardinality.OneToOne, 
+                Operators.VectorMatchCardinality.OneToOne, 
                 ImmutableArray<string>.Empty, 
                 false, 
                 ImmutableArray<string>.Empty, 
@@ -298,7 +303,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void VectorMatching_Ignoring() => Parse(Parser.VectorMatching, "ignoring (one, two)")
             .Should().BeEquivalentTo(new VectorMatching(
-                VectorMatchCardinality.OneToOne, 
+                Operators.VectorMatchCardinality.OneToOne, 
                 new [] { "one", "two" }.ToImmutableArray(), 
                 false, 
                 ImmutableArray<string>.Empty, 
@@ -308,7 +313,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void VectorMatching_On() => Parse(Parser.VectorMatching, "on ()")
             .Should().BeEquivalentTo(new VectorMatching(
-                VectorMatchCardinality.OneToOne, 
+                Operators.VectorMatchCardinality.OneToOne, 
                 ImmutableArray<string>.Empty,  
                 true, 
                 ImmutableArray<string>.Empty, 
@@ -318,7 +323,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void VectorMatching_Bool_On() => Parse(Parser.VectorMatching, "bool on ()")
             .Should().BeEquivalentTo(new VectorMatching(
-                VectorMatchCardinality.OneToOne, 
+                Operators.VectorMatchCardinality.OneToOne, 
                 ImmutableArray<string>.Empty,  
                 true, 
                 ImmutableArray<string>.Empty, 
@@ -328,7 +333,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void VectorMatching_GroupLeft() => Parse(Parser.VectorMatching, "on () group_left ()")
             .Should().BeEquivalentTo(new VectorMatching(
-                VectorMatchCardinality.ManyToOne, 
+                Operators.VectorMatchCardinality.ManyToOne, 
                 ImmutableArray<string>.Empty,  
                 true, 
                 ImmutableArray<string>.Empty, 
@@ -338,7 +343,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void VectorMatching_GroupLeftEmpty() => Parse(Parser.VectorMatching, "on () group_left")
             .Should().BeEquivalentTo(new VectorMatching(
-                VectorMatchCardinality.ManyToOne, 
+                Operators.VectorMatchCardinality.ManyToOne, 
                 ImmutableArray<string>.Empty,  
                 true, 
                 ImmutableArray<string>.Empty, 
@@ -348,7 +353,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void VectorMatching_GroupRight() => Parse(Parser.VectorMatching, "on () group_right (one, two)")
             .Should().BeEquivalentTo(new VectorMatching(
-                VectorMatchCardinality.OneToMany, 
+                Operators.VectorMatchCardinality.OneToMany, 
                 new []{ "one","two"}.ToImmutableArray(),  
                 true, 
                 ImmutableArray<string>.Empty, 
@@ -392,7 +397,7 @@ namespace PromQL.Parser.Tests
                     new VectorSelector(new MetricIdentifier("metric_name")),
                     new VectorSelector(new LabelMatchers(new []
                     {
-                        new LabelMatcher("label", Operators.Match.Equal, new StringLiteral('\'', "one"))
+                        new LabelMatcher("label", Operators.LabelMatch.Equal, new StringLiteral('\'', "one"))
                     }.ToImmutableArray())),
                     Operators.Binary.Add,
                     new VectorMatching()
@@ -441,25 +446,25 @@ namespace PromQL.Parser.Tests
         }
 
         [Test]
-        [TestCase("avg (blah)", Operators.Aggregate.Avg)]
-        [TestCase("bottomk (blah)", Operators.Aggregate.Bottomk)]
-        [TestCase("count (blah)", Operators.Aggregate.Count)]
-        [TestCase("count_values (blah)", Operators.Aggregate.CountValues)]
-        [TestCase("group (blah)", Operators.Aggregate.Group)]
-        [TestCase("max (blah)", Operators.Aggregate.Max)]
-        [TestCase("min (blah)", Operators.Aggregate.Min)]
-        [TestCase("quantile (blah)", Operators.Aggregate.Quantile)]
-        [TestCase("stddev (blah)", Operators.Aggregate.Stddev)]
-        [TestCase("stdvar (blah)", Operators.Aggregate.Stdvar)]
-        [TestCase("sum (blah)", Operators.Aggregate.Sum)]
-        [TestCase("topk (blah)", Operators.Aggregate.Topk)]
-        public void AggregateExpr_Operator(string input, Operators.Aggregate expected) => Parse(Parser.AggregateExpr, input)
-            .Operator.Should().Be(expected);
+        [TestCase("avg (blah)", "avg")]
+        [TestCase("bottomk (blah)", "bottomk")]
+        [TestCase("count (blah)", "count")]
+        [TestCase("count_values (blah)", "count_values")]
+        [TestCase("group (blah)", "group")]
+        [TestCase("max (blah)", "max")]
+        [TestCase("min (blah)", "min")]
+        [TestCase("quantile (blah)", "quantile")]
+        [TestCase("stddev (blah)", "stddev")]
+        [TestCase("stdvar (blah)", "stdvar")]
+        [TestCase("sum (blah)", "sum")]
+        [TestCase("topk (blah)", "topk")]
+        public void AggregateExpr_Operator(string input, string expected) => Parse(Parser.AggregateExpr, input)
+            .OperatorName.Should().Be(expected);
 
         [Test]
         public void AggregateExpr_NoMod() => Parse(Parser.AggregateExpr, "sum (blah)").Should().BeEquivalentTo(
             new AggregateExpr(
-                Operators.Aggregate.Sum,
+                "sum",
                 new VectorSelector(new MetricIdentifier("blah")),
                 null,
                 ImmutableArray<string>.Empty, 
@@ -469,7 +474,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void AggregateExpr_LeadingModBy() => Parse(Parser.AggregateExpr, "sum by (one, two) (blah)").Should().BeEquivalentTo(
             new AggregateExpr(
-                Operators.Aggregate.Sum,
+                "sum",
                 new VectorSelector(new MetricIdentifier("blah")),
                 null,
                 new string[] {"one", "two"}.ToImmutableArray(),
@@ -479,7 +484,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void AggregateExpr_TrailingModWithout() => Parse(Parser.AggregateExpr, "sum (blah) without (one)").Should().BeEquivalentTo(
             new AggregateExpr(
-                Operators.Aggregate.Sum,
+                "sum",
                 new VectorSelector(new MetricIdentifier("blah")),
                 null,
                 new string[] {"one" }.ToImmutableArray(),
@@ -489,7 +494,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void AggregateExpr_TwoArgs() => Parse(Parser.AggregateExpr, "quantile (0.5, blah)").Should().BeEquivalentTo(
             new AggregateExpr(
-                Operators.Aggregate.Quantile,
+                "quantile",
                 new VectorSelector(new MetricIdentifier("blah")),
                 new NumberLiteral(0.5),
                 ImmutableArray<string>.Empty, 
