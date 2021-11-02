@@ -194,7 +194,7 @@ namespace PromQL.Parser
                         {Kind: PromToken.GROUP_RIGHT} => Operators.VectorMatchCardinality.OneToMany,
                         _ => Operators.VectorMatchCardinality.OneToOne
                     },
-                    MatchingLabels = grpLabels
+                    Include = grpLabels
                 }
             ).Try().Or(
                 from vm in OnOrIgnoring

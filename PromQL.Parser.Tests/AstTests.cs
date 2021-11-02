@@ -31,19 +31,99 @@ namespace PromQL.Parser.Tests
                 null, 
                 ImmutableArray<string>.Empty, 
                 false
-            ).ToPromQl().Should().Be("sum by () (test_expr)");
+            ).ToPromQl().Should().Be("sum(test_expr)");
         }
         
+        [Test]
+        public void Aggregate_WithLabels_ToPromQl()
+        {
+            new AggregateExpr("sum",
+                new VectorSelector(new MetricIdentifier("test_expr")),
+                null, 
+                new [] { "one" }.ToImmutableArray(),
+                false
+            ).ToPromQl().Should().Be("sum by (one) (test_expr)");
+        }
+
         [Test]
         public void Aggregate_WithParam_ToPromQl()
         {
             new AggregateExpr("quantile",
                 new VectorSelector(new MetricIdentifier("test_expr")),
-                new NumberLiteral(1), 
-                new []{ "label1", "label2" }.ToImmutableArray(), 
+                new NumberLiteral(1),
+                new[] {"label1", "label2"}.ToImmutableArray(),
                 true
             ).ToPromQl().Should().Be("quantile without (label1, label2) (1, test_expr)");
         }
+        
+        [Test]
+        public void VectorMatching_Default_ToPromQl() => new VectorMatching(false)
+            .ToPromQl().Should().Be("");
+
+        [Test]
+        public void VectorMatching_Bool_ToPromQl() => new VectorMatching(true)
+            .ToPromQl().Should().Be("bool");
+
+        [Test]
+        public void VectorMatching_Ignoring_ToPromQl()
+        {
+            new VectorMatching(
+                Operators.VectorMatchCardinality.OneToOne,
+                new[] {"one", "two"}.ToImmutableArray(),
+                false,
+                ImmutableArray<string>.Empty,
+                false
+            ).ToPromQl().Should().Be("ignoring (one, two)");
+        }
+        
+        [Test]
+        public void VectorMatching_On_ToPromQl()
+        {
+            new VectorMatching(
+                Operators.VectorMatchCardinality.OneToOne,
+                new[] {"one", "two"}.ToImmutableArray(),
+                true,
+                ImmutableArray<string>.Empty,
+                false
+            ).ToPromQl().Should().Be("on (one, two)");
+        }
+        
+        [Test]
+        public void VectorMatching_OnNoLabels_ToPromQl()
+        {
+            new VectorMatching(
+                Operators.VectorMatchCardinality.OneToOne,
+                ImmutableArray<string>.Empty,
+                true,
+                ImmutableArray<string>.Empty,
+                false
+            ).ToPromQl().Should().Be("on ()");
+        }
+        
+        [Test]
+        public void VectorMatching_GroupRight_NoLabels_ToPromQl()
+        {
+            new VectorMatching(
+                Operators.VectorMatchCardinality.OneToMany,
+                ImmutableArray<string>.Empty,
+                false,
+                ImmutableArray<string>.Empty,
+                false
+            ).ToPromQl().Should().Be("group_right");
+        }
+        
+        [Test]
+        public void VectorMatching_GroupLeft_Labels_ToPromQl()
+        {
+            new VectorMatching(
+                Operators.VectorMatchCardinality.ManyToOne,
+                ImmutableArray<string>.Empty,
+                false,
+                new[] {"one", "two"}.ToImmutableArray(),
+                false
+            ).ToPromQl().Should().Be("group_left (one, two)");
+        }
+
         // This expression doesn't have to be valid PromQL to be a useful test
         [Test]
         public void Complex_ToPromQl() =>
@@ -73,6 +153,6 @@ namespace PromQL.Parser.Tests
                 ),
                 Operators.Binary.Add,
                 null
-            ).ToPromQl().Should().Be("(another_metric{one='test', two!='test2'}[1h][1d:5m]) +  -sum(this_is_a_metric offset 5m)");
+            ).ToPromQl().Should().Be("(another_metric{one='test', two!='test2'}[1h][1d:5m]) + -sum(this_is_a_metric offset 5m)");
     }
 }

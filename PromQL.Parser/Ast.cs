@@ -30,7 +30,27 @@ namespace PromQL.Parser
     public record AggregateExpr(string OperatorName, Expr Expr, Expr Param,
         ImmutableArray<string> GroupingLabels, bool Without) : Expr
     {
-        public string ToPromQl() => $"{OperatorName} {(Without ? "without" : "by")} ({string.Join(", ", GroupingLabels)}) ({(Param != null ? string.Join(", ", new []{ Param, Expr}.Select(x => x.ToPromQl())) : Expr.ToPromQl())})";
+        public string ToPromQl()
+        {
+            var sb = new StringBuilder();
+            sb.Append($"{OperatorName}");
+
+            if (GroupingLabels.Length > 0)
+            {
+                sb.Append(" ");
+                sb.Append(Without ? "without" : "by");
+                sb.Append($" ({string.Join(", ", GroupingLabels)}) ");
+            }
+
+            sb.Append("(");
+            if (Param != null)
+                sb.Append($"{Param.ToPromQl()}, ");
+            
+            sb.Append($"{Expr.ToPromQl()}");
+            sb.Append(")");
+
+            return sb.ToString();
+        }
     }
 
     /// <summary>
@@ -43,7 +63,22 @@ namespace PromQL.Parser
     public record BinaryExpr(Expr LeftHandSide, Expr RightHandSide, Operators.Binary Operator,
         VectorMatching VectorMatching) : Expr
     {
-        public string ToPromQl() => $"{LeftHandSide.ToPromQl()} {Operator.ToPromQl()} {VectorMatching?.ToPromQl()} {RightHandSide.ToPromQl()}";
+        public string ToPromQl()
+        {
+            var sb = new StringBuilder();
+            sb.Append(LeftHandSide.ToPromQl());
+            sb.Append(" ");
+            sb.Append(Operator.ToPromQl());
+            sb.Append(" ");
+            
+            var vmPromQl = VectorMatching?.ToPromQl();
+            if (vmPromQl?.Length > 0)
+                sb.Append($"{vmPromQl} ");
+
+            sb.Append(RightHandSide.ToPromQl());
+
+            return sb.ToString();
+        }
     }
 
     /// <summary>
@@ -57,17 +92,56 @@ namespace PromQL.Parser
     public record VectorMatching(Operators.VectorMatchCardinality MatchCardinality, ImmutableArray<string> MatchingLabels,
         bool On, ImmutableArray<string> Include, bool ReturnBool) : IPromQlNode
     {
-        public VectorMatching() : this(Operators.VectorMatchCardinality.OneToOne, ImmutableArray<string>.Empty, false,
+        private const Operators.VectorMatchCardinality DefaultMatchCardinality = Operators.VectorMatchCardinality.OneToOne;
+
+        public VectorMatching() : this(DefaultMatchCardinality, ImmutableArray<string>.Empty, false,
             ImmutableArray<string>.Empty, false)
         {
         }
 
-        public VectorMatching(bool returnBool) : this (Operators.VectorMatchCardinality.OneToOne, ImmutableArray<string>.Empty, false, ImmutableArray<string>.Empty, returnBool  )
+        public VectorMatching(bool returnBool) : this (DefaultMatchCardinality, ImmutableArray<string>.Empty, false, ImmutableArray<string>.Empty, returnBool  )
         {
         }
-        
-        public string ToPromQl() =>
-            $"{(ReturnBool ? "bool" : "")} {(On ? "on" : "ignoring")} ({string.Join(",", MatchingLabels)})  {MatchCardinality.ToPromQl()} ({string.Join(",", Include)})";
+
+        public string ToPromQl()
+        {
+            var sb = new StringBuilder();
+
+            if (ReturnBool)
+                sb.Append("bool");
+
+            if (On || MatchingLabels.Length > 0)
+            {
+                if (sb.Length > 0)
+                    sb.Append(" ");
+                
+                sb.Append(On ? "on" : "ignoring");
+                sb.Append(" (");
+                sb.Append(string.Join(", ", MatchingLabels));
+                sb.Append(")");
+            }
+
+            if (MatchCardinality != DefaultMatchCardinality)
+            {
+                if (sb.Length > 0)
+                    sb.Append(" ");
+                
+                sb.Append(MatchCardinality.ToPromQl());
+            }
+
+            if (Include.Length > 0)
+            {
+                if (sb.Length > 0)
+                    sb.Append(" ");
+                
+                sb.Append("(");
+                sb.Append(string.Join(", ", Include));
+                sb.Append(")");
+            }
+
+            return sb.ToString();
+        }
+      
     };
 
     /// <summary>

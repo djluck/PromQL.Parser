@@ -354,9 +354,9 @@ namespace PromQL.Parser.Tests
         public void VectorMatching_GroupRight() => Parse(Parser.VectorMatching, "on () group_right (one, two)")
             .Should().BeEquivalentTo(new VectorMatching(
                 Operators.VectorMatchCardinality.OneToMany, 
-                new []{ "one","two"}.ToImmutableArray(),  
+                ImmutableArray<string>.Empty,  
                 true, 
-                ImmutableArray<string>.Empty, 
+                new []{ "one","two"}.ToImmutableArray(), 
                 false)
             );
         
