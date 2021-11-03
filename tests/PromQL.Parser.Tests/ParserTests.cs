@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using FluentAssertions;
 using NUnit.Framework;
 using Superpower;
+using Superpower.Model;
 
 namespace PromQL.Parser.Tests
 {
@@ -12,7 +13,10 @@ namespace PromQL.Parser.Tests
         [SetUp]
         public void SetUp()
         {
-            AssertionOptions.AssertEquivalencyUsing(opts => opts.IncludingAllRuntimeProperties());
+            AssertionOptions.AssertEquivalencyUsing(opts => 
+                opts.IncludingAllRuntimeProperties()
+                    .Excluding(p => p.Name == "TextSpan")
+            );
         }
         
         [Test]

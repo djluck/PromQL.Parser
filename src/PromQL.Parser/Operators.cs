@@ -118,9 +118,9 @@ namespace PromQL.Parser
             _ => throw ExhaustiveMatch.Failed(op)
         };
         
-        public static string ToPromQl(this Operators.VectorMatchCardinality op) => op switch
+        public static string? ToPromQl(this Operators.VectorMatchCardinality op) => op switch
         {
-            Operators.VectorMatchCardinality.OneToOne => "",
+            Operators.VectorMatchCardinality.OneToOne => null,
             Operators.VectorMatchCardinality.OneToMany => "group_right",
             Operators.VectorMatchCardinality.ManyToOne => "group_left",
             _ => throw ExhaustiveMatch.Failed(op)

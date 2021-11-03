@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+using Superpower.Model;
 
 namespace PromQL.Parser
 {
@@ -18,7 +19,6 @@ namespace PromQL.Parser
     /// </summary>
     public interface Expr : IPromQlNode {}
 
-
     /// <summary>
     /// Represents an aggregation operation on a Vector.
     /// </summary>
@@ -27,7 +27,7 @@ namespace PromQL.Parser
     /// <param name="Param">Parameter used by some aggregators.</param>
     /// <param name="GroupingLabels">The labels by which to group the Vector.</param>
     /// <param name="Without"> Whether to drop the given labels rather than keep them.</param>
-    public record AggregateExpr(string OperatorName, Expr Expr, Expr Param,
+    public record AggregateExpr(string OperatorName, Expr Expr, Expr? Param,
         ImmutableArray<string> GroupingLabels, bool Without) : Expr
     {
         public string ToPromQl()
@@ -61,7 +61,7 @@ namespace PromQL.Parser
     /// <param name="Operator">The operation of the expression</param>
     /// <param name="VectorMatching">The matching behavior for the operation to be applied if both operands are Vectors.</param>
     public record BinaryExpr(Expr LeftHandSide, Expr RightHandSide, Operators.Binary Operator,
-        VectorMatching VectorMatching) : Expr
+        VectorMatching? VectorMatching) : Expr
     {
         public string ToPromQl()
         {

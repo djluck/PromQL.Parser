@@ -279,7 +279,6 @@ namespace PromQL.Parser
                     yield return reader.AsToken(PromToken.COLON);
                 else if (reader.TryParse(IndentifierOrKeyword, out token))
                     yield return token;
-                // TODO add support for subqueries
                 // TODO add support for 'at'
                 else if (c == '(')
                     yield return reader.AsToken(PromToken.LEFT_PAREN);

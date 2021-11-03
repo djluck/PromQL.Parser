@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Superpower;
@@ -9,17 +10,24 @@ using Superpower.Parsers;
 
 namespace PromQL.Parser
 {
+    
+// Nullability checker goes a bit haywire in the presence of all the Parse.Ref() statements- need to disable some of it's checks
+#pragma warning disable CS8603
+    
+    /// <summary>
+    /// Contains parsers for all syntactic components of PromQL expressions.
+    /// </summary>
     public static class Parser
     {
-        public static TokenListParser<PromToken, UnaryExpr> UnaryExpr =
-            from op in Parse.Ref(() => UnaryOperator)
-            from expr in Parse.Ref(() => Expr)
-            select new UnaryExpr(op, expr);
-        
         public static TokenListParser<PromToken, Operators.Unary> UnaryOperator =
             Token.EqualTo(PromToken.ADD).Select(_ => Operators.Unary.Add).Or(
                 Token.EqualTo(PromToken.SUB).Select(_ => Operators.Unary.Sub)
             );
+        
+        public static TokenListParser<PromToken, UnaryExpr> UnaryExpr =
+            from op in Parse.Ref(() => UnaryOperator)
+            from expr in Parse.Ref(() => Expr)
+            select new UnaryExpr(op, expr);
 
         public static TokenListParser<PromToken, MetricIdentifier> MetricIdentifier =
             from id in Token.EqualTo(PromToken.METRIC_IDENTIFIER)
@@ -46,7 +54,7 @@ namespace PromQL.Parser
         public static TokenListParser<PromToken, VectorSelector> VectorSelector =
         (
             from m in MetricIdentifier
-            from lm in LabelMatchers.OptionalOrDefault()
+            from lm in LabelMatchers.AsNullable().OptionalOrDefault()
             select new VectorSelector(m, lm)
         ).Or(
             from lm in LabelMatchers
@@ -55,7 +63,7 @@ namespace PromQL.Parser
 
         public static TokenListParser<PromToken, MatrixSelector> MatrixSelector =
             from vs in VectorSelector
-            from d in Duration.Between(Token.EqualTo(PromToken.LEFT_BRACKET), Token.EqualTo(PromToken.RIGHT_BRACKET))
+            from d in Parse.Ref(() => Duration).Between(Token.EqualTo(PromToken.LEFT_BRACKET), Token.EqualTo(PromToken.RIGHT_BRACKET))
             select new MatrixSelector(vs, d);
 
         // TODO see https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/generated_parser.y#L679
@@ -139,10 +147,10 @@ namespace PromQL.Parser
             select new OffsetExpr(expr, new Duration(new TimeSpan(duration.Value.Ticks * (neg.HasValue ? -1 : 1))));
 
         public static TokenListParser<PromToken, ParenExpression> ParenExpression =
-            from e in Parse.Ref(() => Expr.Between(Token.EqualTo(PromToken.LEFT_PAREN), Token.EqualTo(PromToken.RIGHT_PAREN)))
+            from e in Parse.Ref(() => Expr).Between(Token.EqualTo(PromToken.LEFT_PAREN), Token.EqualTo(PromToken.RIGHT_PAREN))
             select new ParenExpression(e);
 
-        public static TokenListParser<PromToken, Expr[]> FunctionArgs = Parse.Ref(() => Expr.ManyDelimitedBy(Token.EqualTo(PromToken.COMMA)))
+        public static TokenListParser<PromToken, Expr[]> FunctionArgs = Parse.Ref(() => Expr).ManyDelimitedBy(Token.EqualTo(PromToken.COMMA))
             .Between(Token.EqualTo(PromToken.LEFT_PAREN), Token.EqualTo(PromToken.RIGHT_PAREN));
         
         public static TokenListParser<PromToken, FunctionCall> FunctionCall =
@@ -176,7 +184,7 @@ namespace PromQL.Parser
             from lb in Token.EqualTo(PromToken.LEFT_BRACKET)
             from range in Duration
             from colon in Token.EqualTo(PromToken.COLON)
-            from step in Duration.OptionalOrDefault()
+            from step in Duration.AsNullable().OptionalOrDefault()
             from rb in Token.EqualTo(PromToken.RIGHT_BRACKET)
             select new SubqueryExpr(expr, range, step);
 
@@ -228,8 +236,8 @@ namespace PromQL.Parser
         public static TokenListParser<PromToken, BinaryExpr> BinaryExpr =
             from lhs in Parse.Ref(() => ExprNotBinary)
             from op in Token.Matching<PromToken>(x => BinaryOperatorMap.ContainsKey(x), "binary_op")
-            from vm in VectorMatching.OptionalOrDefault()
-            from rhs in Expr
+            from vm in VectorMatching.AsNullable().OptionalOrDefault()
+            from rhs in Parse.Ref(() => Expr)
             select new BinaryExpr(lhs, rhs, BinaryOperatorMap[op.Kind], vm);
 
         public static TokenListParser<PromToken, (bool without, ImmutableArray<string> labels)> AggregateModifier =
@@ -265,8 +273,10 @@ namespace PromQL.Parser
                  String.Cast<PromToken, StringLiteral, Expr>(),
                  Number.Cast<PromToken, NumberLiteral, Expr>()
              )
-             from offsetOrSubquery in OffsetOrSubquery(head).OptionalOrDefault()
-             select offsetOrSubquery ?? head;
+#pragma warning disable CS8602
+             from offsetOrSubquery in Parse.Ref(() => OffsetOrSubquery(head)).AsNullable().OptionalOrDefault()
+#pragma warning restore CS8602
+             select offsetOrSubquery == null ? head : offsetOrSubquery;
 
         public static Func<Expr, TokenListParser<PromToken, Expr>> OffsetOrSubquery = (Expr expr) =>
              from offsetOfSubquery in (
@@ -277,18 +287,18 @@ namespace PromQL.Parser
                  select (Expr)subquery
              )
              select offsetOfSubquery;
-
-         public static TokenListParser<PromToken, Expr> Expr =
+        
+        public static TokenListParser<PromToken, Expr> Expr { get; } =
              from head in Parse.Ref(() => BinaryExpr).Cast<PromToken, BinaryExpr, Expr>().Try().Or(ExprNotBinary)
-             from offsetOrSubquery in OffsetOrSubquery(head).OptionalOrDefault()
-             select offsetOrSubquery ?? head;
+             from offsetOrSubquery in OffsetOrSubquery(head).AsNullable().OptionalOrDefault()
+             select offsetOrSubquery == null ? head : offsetOrSubquery;
 
         /// <summary>
         /// Parse the specified input as a PromQL expression.
         /// </summary>
         /// <param name="input"></param>
         /// <returns></returns>
-        public static Expr ParseExpression(string input, Tokenizer tokenizer = null)
+        public static Expr ParseExpression(string input, Tokenizer? tokenizer = null)
         {
             tokenizer ??= new Tokenizer();
             return Expr.Parse(new TokenList<PromToken>(
