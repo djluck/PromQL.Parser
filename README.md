@@ -18,9 +18,9 @@ Parser.ParseExpression(@"
 	/ sum by (code) (rate(http_request_count[1m]))
 ").ToString()
 ```
+```
 Returns:
 ```
-/*
 BinaryExpr { 
   LeftHandSide = AggregateExpr { 
     OperatorName = sum, 
@@ -50,7 +50,6 @@ BinaryExpr {
     ReturnBool = False 
   } 
 }
-/*
 ```
 
 Invalid expressions will throw an exception:
@@ -66,7 +65,7 @@ Superpower.ParseException: Syntax error (line 1, column 21): Unexpected left bra
    at UserQuery.Main() in C:\Users\james.luck\AppData\Local\Temp\LINQPad6\_aryncqeb\dwfjew\LINQPadQuery:line [[
 ```
 
-**Only an expressions syntax is validated, semantic validation is not applied**. For example, the following expressions 
+**Only syntax is validated, semantic validation is not applied**. For example, the following expressions 
 are considered valid by this library:
 
 ```
