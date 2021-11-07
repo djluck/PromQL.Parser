@@ -18,7 +18,7 @@ Parser.ParseExpression(@"
 	/ sum by (code) (rate(http_request_count[1m]))
 ").ToString()
 ```
-```
+
 Returns:
 ```
 BinaryExpr { 
@@ -55,7 +55,7 @@ BinaryExpr {
 Invalid expressions will throw an exception:
 ```csharp
 // Too many brackets + missing rest of matrix selector
-Parser.ParseExpression(@"http_request_count[[ ")
+Parser.ParseExpression("http_request_count[[ ")
 ```
 Throws:
 ```
@@ -77,12 +77,51 @@ sum(1.0, "a string")
 
 # Binary operations not defined for strings
 "a" + "b"
+
+...
 ```
 
 ### Modifying PromQL expressions
+The Abstract Syntax Tree is represented using [`record` types](https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/record).
+This means making copies of the AST is trivial:
+```csharp
+var expr = (BinaryExpr) Parser.ParseExpression(@"1 + 1");
+
+// original expression is not mutated
+var newExpr = expr with { RightHandSide = new NumberLiteral(2) };
+```
+
+`newExpr` equals:
+```
+BinaryExpr { 
+  LeftHandSide = NumberLiteral { Value = 1 }, 
+  RightHandSide = NumberLiteral { Value = 2 }, 
+  Operator = Add, 
+  VectorMatching = ...
+}
+```
 
 ### Emitting PromQL expressions
-- Won't preserve comments/ whitespace
+An Abstract Syntax Tree can be converted back to its PromQL string representation, e.g:
+```csharp
+var printer = new Printer();
+var expr = Parser.ParseExpression(@"
+# A comment
+sum(
+	avg_over_time(metric[1h:5m])
+) by (label1)
+");
+printer.ToPromQl(expr);
+```
+
+Produces:
+```
+// NOTE:
+// 1. Comments are not preserved
+// 2. Whitespace/ indentation is not preserved
+// 3. Language elements may in a different order than originally specified
+sum by (label1) (avg_over_time(metric[1h:5m]))
+```
 
 ### Creating PromQl expressions
 - Won't guard against creation of semantically invalid expressions
