@@ -4,7 +4,10 @@ A parser for the Prometheus Query Language (PromQL), written in C# and using the
 ## Installation
 **Requires .NET core 3.1+**
 
-TODO
+Install [from Nuget](https://www.nuget.org/packages/PromQL.Parser/):
+```
+dotnet add package PromQL.Parser
+```
 
 
 ## User guide
