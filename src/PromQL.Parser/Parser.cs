@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.RegularExpressions;
+using PromQL.Parser.Ast;
 using Superpower;
 using Superpower.Model;
 using Superpower.Parsers;
@@ -79,7 +79,7 @@ namespace PromQL.Parser
         public static TokenListParser<PromToken, LabelMatcher> LabelMatcher =
             from id in LabelValueMatcher
             from op in MatchOp
-            from str in String
+            from str in StringLiteral
             select new LabelMatcher(id, op, (StringLiteral)str);
         
         public static TokenListParser<PromToken, Operators.LabelMatch> MatchOp =
@@ -97,7 +97,14 @@ namespace PromQL.Parser
                 Token.EqualTo(PromToken.ADD).Or(Token.EqualTo(PromToken.SUB))
             ).OptionalOrDefault(new Token<PromToken>(PromToken.ADD, TextSpan.Empty))
             from n in Token.EqualTo(PromToken.NUMBER)
-            select new NumberLiteral(double.Parse(n.ToStringValue()) * (s.Kind == PromToken.SUB ? -1 : 1));
+            select new NumberLiteral(
+                (n.ToStringValue(), s.Kind) switch
+                {
+                    (var v, PromToken.ADD) when v.Equals("Inf", StringComparison.OrdinalIgnoreCase) => double.PositiveInfinity,
+                    (var v, PromToken.SUB) when v.Equals("Inf", StringComparison.OrdinalIgnoreCase) => double.NegativeInfinity,
+                    (var v, var op) => double.Parse(v) * (op == PromToken.SUB ? -1.0 : 1.0)
+                }
+            );
 
         /// <summary>
         /// Taken from https://github.com/prometheus/common/blob/88f1636b699ae4fb949d292ffb904c205bf542c9/model/time.go#L186
@@ -135,9 +142,55 @@ namespace PromQL.Parser
                     return new Duration(ts);
                 });
 
-        public static TokenListParser<PromToken, StringLiteral> String =
+        // TODO support unicode, octal and hex escapes
+        public static TextParser<string> StringText(char quoteChar) =>
+            from open in Character.EqualTo(quoteChar)
+            from content in (
+                from escape in Character.EqualTo('\\')
+                // Taken from https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/lex.go#L554
+                from value in Character.In(quoteChar, 'a', 'b', 'f', 'n', 'r', 't', 'v', '\\')
+                    .Message("Unexpected escape sequence")
+                select (char)(
+                    value switch
+                    {
+                        'a' => '\a',
+                        'b' => '\b',
+                        'f' => '\f',
+                        'n' => '\n',
+                        'r' => '\r',
+                        't' => '\t',
+                        'v' => '\v',
+                        _ => value
+                    }
+                )
+            ).Or(Character.ExceptIn(quoteChar, '\n'))
+            .Many()
+            from close in Character.EqualTo(quoteChar)
+            select new string(content);
+
+        public static TextParser<string> SingleQuoteStringLiteral = StringText('\'');
+        public static TextParser<string> DoubleQuoteStringLiteral = StringText('"');
+        
+         public static TextParser<string> RawString =>
+            from open in Character.EqualTo('`')
+            from content in Character.Except('`').Many()
+            from close in Character.EqualTo('`')
+            select new string(content);
+
+        public static TokenListParser<PromToken, StringLiteral> StringLiteral =
             Token.EqualTo(PromToken.STRING)
-                .Select(n => new StringLiteral(n.Span.ConsumeChar().Value, n.Span.ToStringValue()[1..^1]));
+                .Select(t =>
+                {
+                    var c = t.Span.ConsumeChar();
+                    if (c.Value == '\'')
+                        return new StringLiteral('\'', SingleQuoteStringLiteral.Parse(t.Span.ToStringValue()));
+                    if (c.Value == '"')
+                        return new StringLiteral('"', DoubleQuoteStringLiteral.Parse(t.Span.ToStringValue()));
+                    if (c.Value == '`')
+                        return new StringLiteral('`', RawString.Parse(t.Span.ToStringValue()));
+                    
+                    throw new ParseException($"Unexpected string quote", t.Span.Position);
+                });
 
 
         public static Func<Expr, TokenListParser<PromToken, OffsetExpr>> OffsetExpr = (Expr expr) =>
@@ -267,11 +320,11 @@ namespace PromQL.Parser
                  Parse.Ref(() => ParenExpression).Cast<PromToken, ParenExpression, Expr>(),
                  Parse.Ref(() => AggregateExpr).Cast<PromToken, AggregateExpr, Expr>(),
                  Parse.Ref(() => FunctionCall).Cast<PromToken, FunctionCall, Expr>(),
+                 Number.Cast<PromToken, NumberLiteral, Expr>().Try(),
                  Parse.Ref(() => UnaryExpr).Cast<PromToken, UnaryExpr, Expr>(),
                  MatrixSelector.Cast<PromToken, MatrixSelector, Expr>().Try(),
                  VectorSelector.Cast<PromToken, VectorSelector, Expr>(),
-                 String.Cast<PromToken, StringLiteral, Expr>(),
-                 Number.Cast<PromToken, NumberLiteral, Expr>()
+                 StringLiteral.Cast<PromToken, StringLiteral, Expr>()
              )
 #pragma warning disable CS8602
              from offsetOrSubquery in Parse.Ref(() => OffsetOrSubquery(head)).AsNullable().OptionalOrDefault()
@@ -301,7 +354,7 @@ namespace PromQL.Parser
         public static Expr ParseExpression(string input, Tokenizer? tokenizer = null)
         {
             tokenizer ??= new Tokenizer();
-            return Expr.Parse(new TokenList<PromToken>(
+            return Expr.AtEnd().Parse(new TokenList<PromToken>(
                 tokenizer.Tokenize(input).Where(x => x.Kind != PromToken.COMMENT).ToArray()
             ));
         }

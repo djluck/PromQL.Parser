@@ -77,10 +77,7 @@ namespace PromQL.Parser
             /// </summary>
             Sub
         }
-    }
-    
-    public static class Extensions
-    {
+        
         public static string ToPromQl(this Operators.Binary op) => op switch
         {
             Operators.Binary.Add => "+",
@@ -126,5 +123,4 @@ namespace PromQL.Parser
             _ => throw ExhaustiveMatch.Failed(op)
         };
     }
-    
 }

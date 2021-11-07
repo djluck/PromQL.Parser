@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using FluentAssertions;
 using NUnit.Framework;
+using PromQL.Parser.Ast;
 using Superpower;
 using Superpower.Model;
 
@@ -20,23 +21,41 @@ namespace PromQL.Parser.Tests
         }
         
         [Test]
-        public void StringLiteralDoubleQuote() => Parse(Parser.String, "\"A string\"")
+        public void StringLiteralDoubleQuote() => Parse(Parser.StringLiteral, "\"A string\"")
             .Should().Be(new StringLiteral('"', "A string"));
         
         [Test]
-        [Ignore("Isn't working atm")]
-        public void StringLiteralDoubleQuoteEscaped() => Parse(Parser.String, "\"A \\\"string\"")
-            .Should().Be(new StringLiteral('"', "A \"string"));
+        public void StringLiteralDoubleQuoteEscaped() => Parse(Parser.StringLiteral, @"""\a\b\f\n\r\t\v\\\""""")
+            .Should().Be(new StringLiteral('"', "\a\b\f\n\r\t\v\\\""));
         
         [Test]
-        public void StringLiteralSingleQuote() => Parse(Parser.String, "'A string'")
+        public void StringLiteralDoubleQuoteNewline() => 
+            Assert.Throws<ParseException>(() => Parse(Parser.StringLiteral, "\"\n\""));
+        
+        [Test]
+        public void StringLiteralSingleQuote() => Parse(Parser.StringLiteral, "'A string'")
             .Should().Be(new StringLiteral('\'', "A string"));
+
+        [Test]
+        public void StringLiteralSingleQuoteEscaped() => Parse(Parser.StringLiteral, @"'\a\b\f\n\r\t\v\\\''")
+            .Should().Be(new StringLiteral('\'', "\a\b\f\n\r\t\v\\\'"));
         
         [Test]
-        [Ignore("Isn't working atm")]
-        public void StringLiteralSingleQuoteEscaped() => Parse(Parser.String, "'A \\'string'")
-            .Should().Be(new StringLiteral('\'', "A 'string"));
+        public void StringLiteralSingleQuoteNewline() => 
+            Assert.Throws<ParseException>(() => Parse(Parser.StringLiteral, "'\n'"));
+        
+        [Test]
+        public void StringLiteralRaw() => Parse(Parser.StringLiteral, "`A string`")
+            .Should().Be(new StringLiteral('`', "A string"));
+        
+        [Test]
+        public void StringLiteralRaw_Multiline() => Parse(Parser.StringLiteral, "`A\n string`")
+            .Should().Be(new StringLiteral('`', "A\n string"));
 
+        [Test]
+        public void StringLiteralRaw_NoEscapes() => Parse(Parser.StringLiteral, @"`\a\b\f\n\r\t\v`")
+            .Should().Be(new StringLiteral('`', @"\a\b\f\n\r\t\v"));
+        
         [Test]
         [TestCase("2y52w365d25h10m30s100ms", "1460.01:10:30.100")]
         [TestCase("60w", "420.00:00:00")]
@@ -59,6 +78,24 @@ namespace PromQL.Parser.Tests
         [TestCase("1.55E+5", 155000)]
         public void Number(string input, double expected) => Parse(Parser.Number, input)
             .Should().Be(new NumberLiteral(expected));
+        
+        [Test]
+        [TestCase("nan")]
+        [TestCase("NaN")]
+        public void Number_NaN(string input) => Parse(Parser.Number, input)
+            .Should().Be(new NumberLiteral(double.NaN));
+        
+       [Test]
+       [TestCase("Inf")]
+       [TestCase("+inf")]
+       public void Number_InfPos(string input) => Parse(Parser.Number, input)
+           .Should().Be(new NumberLiteral(double.PositiveInfinity));
+       
+       [Test]
+       [TestCase("-Inf")]
+       [TestCase("-inf")]
+       public void Number_InfNeg(string input) => Parse(Parser.Number, input)
+           .Should().Be(new NumberLiteral(double.NegativeInfinity));
 
         [Test]
         public void LabelMatchers_Empty()
@@ -259,8 +296,15 @@ namespace PromQL.Parser.Tests
             Parse(Parser.Expr, "some_expr offset 1d").Should().BeOfType<OffsetExpr>();
             Parse(Parser.Expr, "some_expr").Should().BeOfType<VectorSelector>();
             Parse(Parser.Expr, "some_expr[1d]").Should().BeOfType<MatrixSelector>();
-            Parse(Parser.Expr, "+1").Should().BeOfType<UnaryExpr>();
+            Parse(Parser.Expr, "+(1)").Should().BeOfType<UnaryExpr>();
             Parse(Parser.Expr, "abs()").Should().BeOfType<FunctionCall>();
+        }
+        
+        [Test]
+        public void Expr_NumberWithSign()
+        {
+            Parse(Parser.Expr, "+1").Should().Be(new NumberLiteral(1));
+            Parse(Parser.Expr, "-1").Should().Be(new NumberLiteral(-1));
         }
         
         // TODO probably need to expand upon our invalid test cases significantly
@@ -409,7 +453,6 @@ namespace PromQL.Parser.Tests
         }
         
         [Test]
-        // TODO operator associativity 
         public void BinaryExpr_Repetitive()
         {
             var result = Parse(Parser.BinaryExpr, "1 + 2 + 3") as BinaryExpr;
@@ -532,8 +575,10 @@ namespace PromQL.Parser.Tests
          {
              Parse(Parser.Expr, "vector(1) [1h:]").Should().BeOfType<SubqueryExpr>().Which
                  .Expr.Should().BeOfType<FunctionCall>();
-             // TODO fix this hopefully
-             //Parse(Parser.SubqueryExpr, "1 + 1 [1h:]").Expr.Should().BeOfType<BinaryExpr>();
+             
+             Parse(Parser.Expr, "1 + 1 [1h:]").Should().BeOfType<BinaryExpr>().Which
+                 .RightHandSide.Should().BeOfType<SubqueryExpr>();
+             
              Parse(Parser.Expr, "(1 + 1) [1h:]").Should().BeOfType<SubqueryExpr>().Which
                  .Expr.Should().BeOfType<ParenExpression>();
              

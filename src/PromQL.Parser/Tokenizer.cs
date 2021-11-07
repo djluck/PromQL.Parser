@@ -30,8 +30,6 @@ namespace PromQL.Parser
             ["group_left"] =   PromToken.GROUP_LEFT,
             ["group_right"] =  PromToken.GROUP_RIGHT,
             ["bool"] =         PromToken.BOOL,
-            
-            // TODO support inf/ nan
             ["inf"] =          PromToken.NUMBER,
             ["nan"] =          PromToken.NUMBER
 
@@ -68,14 +66,15 @@ namespace PromQL.Parser
             ).AtLeastOnce()
             select new string(d.SelectMany(x => x).ToArray());
         
-        // TODO there's quite a few rules around strings we need to look at 
-        public static TextParser<string> QuotedSting(char quoteChar) =>
+        public static TextParser<Unit> QuotedSting(char quoteChar, bool lineBreakAllowed = false) =>
             from open in Character.EqualTo(quoteChar)
-            from content in Character.EqualTo('\\').IgnoreThen(Character.EqualTo(quoteChar)).Try()
-                .Or(Character.ExceptIn(quoteChar, '\n'))
+            from content in (
+                    Character.EqualTo('\\').IgnoreThen(Character.AnyChar).Try().Or(Character.ExceptIn(
+                        new[] {quoteChar}.Concat(lineBreakAllowed ? Array.Empty<char>() : new[] {'\n'}).ToArray()))
+                )
                 .Many()
             from close in Character.EqualTo(quoteChar)
-            select new string(content);
+            select Unit.Value;
 
         public TextParser<PromToken> Identifier { get; set; } = Span.MatchedBy(
                 Character.Letter.Or(Character.In('_')).IgnoreThen(Character.LetterOrDigit.Or(Character.In('_')).Many())
@@ -98,7 +97,10 @@ namespace PromQL.Parser
                 return PromToken.IDENTIFIER;
             });
         
-        public TextParser<PromToken> String { get; set; } = QuotedSting('\'').Or(QuotedSting('"')).Select(_ => PromToken.STRING);
+        public TextParser<PromToken> String { get; set; } = QuotedSting('\'')
+            .Or(QuotedSting('"'))
+            .Or(QuotedSting('`', lineBreakAllowed: true))
+            .Select(_ => PromToken.STRING);
 
         public class Reader
         {
@@ -192,6 +194,7 @@ namespace PromQL.Parser
                 yield break;
 
             var bracketsOpen = false;
+            var parenDepth = 0;
 
             do
             {
@@ -274,17 +277,24 @@ namespace PromQL.Parser
                     yield return token;
                 else if (reader.TryParseToken(String, out token))
                     yield return token;
-                // TODO Support raw string
                 else if (bracketsOpen && c == ':')
                     yield return reader.AsToken(PromToken.COLON);
                 else if (reader.TryParse(IndentifierOrKeyword, out token))
                     yield return token;
                 // TODO add support for 'at'
                 else if (c == '(')
+                {
+                    parenDepth++;
                     yield return reader.AsToken(PromToken.LEFT_PAREN);
-                // TODO track paren depth and support better err messages: https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/lex.go#L424
+                }
                 else if (c == ')')
+                {
+                    parenDepth--;
+                    if (parenDepth < 0)
+                        yield return reader.AsError("Unexpected right parenthesis");
+
                     yield return reader.AsToken(PromToken.RIGHT_PAREN);
+                }
                 else if (c == '[')
                 {
                     if (bracketsOpen)
@@ -307,6 +317,11 @@ namespace PromQL.Parser
                 reader.SkipWhiteSpace();
 
             } while (reader.Position.HasValue);
+            
+            if (parenDepth != 0)
+                yield return reader.AsError("Unclosed left parenthesis");
+            else if (bracketsOpen)
+                yield return reader.AsError("Unclosed left bracket");
         }
         
         /// <summary>
@@ -321,8 +336,13 @@ namespace PromQL.Parser
             while (true)
             {
                 reader.SkipWhiteSpace();
-                var c = reader.Position.Value;
+                if (!reader.Position.HasValue)
+                {
+                    yield return reader.AsError("Unexpected end of input inside braces");
+                    yield break;
+                }
                 
+                var c = reader.Position.Value;
                 
                 if (c == '{')
                     yield return reader.AsError("Unexpected left brace");
@@ -331,8 +351,6 @@ namespace PromQL.Parser
                     yield return reader.AsToken(PromToken.RIGHT_BRACE);
                     yield break;
                 }
-                else if (reader.Position.Remainder.IsAtEnd)
-                    yield return reader.AsError("Unexpected EOF inside braces");
                 else if (reader.TryParseToken(Comment, PromToken.COMMENT, out token))
                     yield return token;
                 else if (reader.TryParseToken(Identifier, out token))
@@ -341,7 +359,6 @@ namespace PromQL.Parser
                     yield return token;
                 else if (reader.Position.Value == ',')
                     yield return reader.AsToken(PromToken.COMMA);
-                // TODO raw string
                 else if (c == '=')
                 {
                     if (reader.Peek().Value == '~')

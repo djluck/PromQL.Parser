@@ -1,6 +1,7 @@
 ﻿using System;
 using FluentAssertions;
 using NUnit.Framework;
+using PromQL.Parser.Ast;
 using Superpower;
 using Superpower.Parsers;
 
@@ -40,9 +41,25 @@ namespace PromQL.Parser.Tests
             // ..and subqueries
             Parser.ParseExpression("my_metric[$__rate_interval:]", tokenizer).Should().BeOfType<SubqueryExpr>()
                 .Which.Range.Value.Should().Be(new TimeSpan(-1));;
+            
+            // And then prove we can modify how expressions are printed
+            var printer = new CustomPrinter();
+            printer.ToPromQl(Parser.ParseExpression("my_metric[$__interval]", tokenizer))
+                .Should().Be("my_metric[$__my_replaced_value]");
 
             // Restore original parser so rest of tests can pass
             Parser.Duration = original;
+        }
+
+        public class CustomPrinter : Printer
+        {
+            public override void Visit(Duration d)
+            {
+                if (d.Value == new TimeSpan(-1))
+                    Write($"$__my_replaced_value");
+                else
+                    base.Visit(d);
+            }
         }
     }
 }

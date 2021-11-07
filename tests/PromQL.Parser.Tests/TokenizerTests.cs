@@ -1,6 +1,7 @@
 using System.Linq;
 using FluentAssertions;
 using NUnit.Framework;
+using Superpower;
 
 namespace PromQL.Parser.Tests
 {
@@ -114,6 +115,55 @@ namespace PromQL.Parser.Tests
                 PromToken.DURATION,
                 PromToken.RIGHT_BRACKET
             );
+        }
+
+        [Test]
+        public void Braces_EOF()
+        {
+            Assert.Throws<ParseException>(() => new Tokenizer().Tokenize("http_request_count{"))
+                .Message.Should().Contain("Unexpected end of input inside braces");
+        }
+        
+        [Test]
+        public void Braces_ExtraBrace()
+        {
+            Assert.Throws<ParseException>(() => new Tokenizer().Tokenize("http_request_count{{"))
+                .Message.Should().Contain("Unexpected left brace");
+        }
+        
+        [Test]
+        public void Paren_Unbalanaced()
+        {
+            Assert.Throws<ParseException>(() => new Tokenizer().Tokenize("(1)) + 1"))
+                .Message.Should().Contain("Unexpected right parenthesis");
+        }
+        
+        [Test]
+        public void Paren_Unclosed()
+        {
+            Assert.Throws<ParseException>(() => new Tokenizer().Tokenize("(((hello)"))
+                .Message.Should().Contain("Unclosed left parenthesis");
+        }
+        
+        [Test]
+        public void Bracket_TooManyStart()
+        {
+            Assert.Throws<ParseException>(() => new Tokenizer().Tokenize("blah[[1m]"))
+                .Message.Should().Contain("Unexpected left bracket");
+        }
+        
+        [Test]
+        public void Bracket_TooManyEnd()
+        {
+            Assert.Throws<ParseException>(() => new Tokenizer().Tokenize("blah[1m]]"))
+                .Message.Should().Contain("Unexpected right bracket");
+        }
+        
+        [Test]
+        public void Bracket_Unclosed()
+        {
+            Assert.Throws<ParseException>(() => new Tokenizer().Tokenize("blah[1m]]"))
+                .Message.Should().Contain("Unexpected right bracket");
         }
     }
 }
