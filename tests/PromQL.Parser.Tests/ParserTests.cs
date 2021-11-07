@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using FluentAssertions;
 using NUnit.Framework;
 using PromQL.Parser.Ast;
 using Superpower;
+using Superpower.Display;
 using Superpower.Model;
 
 namespace PromQL.Parser.Tests
@@ -97,13 +100,19 @@ namespace PromQL.Parser.Tests
        public void Number_InfNeg(string input) => Parse(Parser.Number, input)
            .Should().Be(new NumberLiteral(double.NegativeInfinity));
 
+
+       [Test]
+       [TestCaseSource(nameof(FunctionsKeywordsAggregatesAndOperators))]
+       public void LabelValueMatcher_FunctionsOperatorsAndKeywords(string identifier) =>
+           Parse(Parser.LabelValueMatcher, identifier).Should().Be(identifier);
+
         [Test]
         public void LabelMatchers_Empty()
         {
             Parse(Parser.LabelMatchers, "{}")
                 .Should().Be(new LabelMatchers(ImmutableArray<LabelMatcher>.Empty));
         }
-        
+
         [Test]
         public void LabelMatchers_EmptyNoComma()
         {
@@ -303,8 +312,17 @@ namespace PromQL.Parser.Tests
         [Test]
         public void Expr_NumberWithSign()
         {
+            // Make sure we don't parse this as a unary expression!
             Parse(Parser.Expr, "+1").Should().Be(new NumberLiteral(1));
             Parse(Parser.Expr, "-1").Should().Be(new NumberLiteral(-1));
+        }
+        
+        [Test]
+        [TestCaseSource(nameof(FunctionsKeywordsAggregatesAndOperators))]
+        public void Expr_KeywordOrFunctionMetricIdentifier(string input)
+        {
+            Parse(Parser.Expr, input).Should().BeOfType<VectorSelector>().Which
+                .MetricIdentifier.Value.Should().Be(input);
         }
         
         // TODO probably need to expand upon our invalid test cases significantly
@@ -472,11 +490,7 @@ namespace PromQL.Parser.Tests
                 .LeftHandSide.Should().BeOfType<ParenExpression>().Which
                 .Expr.Should().BeOfType<BinaryExpr>().Which
                 .LeftHandSide.Should().Be(new NumberLiteral(1.0));
-        }
-        
-        [Test]
-        public void BinaryExpr_Nested2()
-        {
+            
             Parse(Parser.Expr, "(100 * (1) / 128)");
         }
         
@@ -585,8 +599,6 @@ namespace PromQL.Parser.Tests
              Parse(Parser.Expr, "blah{} [1h:]").Should().BeOfType<SubqueryExpr>().Which
                  .Expr.Should().BeOfType<VectorSelector>();
          }
-         
-         // TODO test all the functions + keywords that can be part of label + metric names
 
          public static T Parse<T>(TokenListParser<PromToken, T> parser, string input)
         {
@@ -600,6 +612,34 @@ namespace PromQL.Parser.Tests
                 Console.WriteLine($"Tokens are: {string.Join(",", tokens)})");
                 throw;
             }
+        }
+
+        public static IEnumerable<string[]> FunctionsKeywordsAggregatesAndOperators()
+        {
+            // aggregate ops
+            yield return new [] {"avg"};
+            yield return new [] {"sum"};
+            yield return new [] {"quantile"};
+            yield return new [] {"max"};
+            yield return new [] {"min"};
+            
+            // functions
+            yield return new [] {"avg_over_time"};
+            yield return new [] {"time"};
+            yield return new [] {"rate"};
+            
+            // operators
+            yield return new [] {"or"};
+            yield return new [] {"and"};
+            yield return new [] {"unless"};
+            
+            // keywords
+            yield return new [] {"group_left"};
+            yield return new [] {"group_right"};
+            yield return new [] {"without"};
+            yield return new [] {"ignoring"};
+            yield return new [] {"by"};
+            yield return new [] {"bool"};
         }
     }
 }

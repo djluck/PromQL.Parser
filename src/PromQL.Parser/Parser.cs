@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using PromQL.Parser.Ast;
 using Superpower;
+using Superpower.Display;
 using Superpower.Model;
 using Superpower.Parsers;
 
@@ -29,11 +30,18 @@ namespace PromQL.Parser
             from expr in Parse.Ref(() => Expr)
             select new UnaryExpr(op, expr);
 
+        private static readonly HashSet<PromToken> KeywordAndAlphanumericOperatorTokens = typeof(PromToken)
+            .GetMembers()
+            .Select(enumMember => (enumMember, attr: enumMember.GetCustomAttributes(typeof(TokenAttribute), false).Cast<TokenAttribute>().SingleOrDefault()))
+            .Where(x => x.attr != null && (x.attr.Category == "Keyword" || (x.attr.Category == "Operator" && Regex.IsMatch(x.attr.Example, "^[a-zA-Z0-9]+$"))))
+            .Select(x => Enum.Parse<PromToken>(x.enumMember.Name))
+            .ToHashSet();
+
         public static TokenListParser<PromToken, MetricIdentifier> MetricIdentifier =
             from id in Token.EqualTo(PromToken.METRIC_IDENTIFIER)
-                // TODO support all function names and keywords here + dedupe logic from LabelIdentifier
                 .Or(Token.EqualTo(PromToken.IDENTIFIER))
                 .Or(Token.EqualTo(PromToken.AGGREGATE_OP).Where(t => Operators.Aggregates.Contains(t.ToStringValue()), "aggregate_op"))
+                .Or(Token.Matching<PromToken>(t => KeywordAndAlphanumericOperatorTokens.Contains(t), "operator"))
             select new MetricIdentifier(id.ToStringValue());
 
         public static TokenListParser<PromToken, LabelMatchers> LabelMatchers =
@@ -70,10 +78,10 @@ namespace PromQL.Parser
         public static TokenListParser<PromToken, string> LabelValueMatcher =
             from id in Token.EqualTo(PromToken.IDENTIFIER)
                 .Or(Token.EqualTo(PromToken.AGGREGATE_OP).Where(x => Operators.Aggregates.Contains(x.ToStringValue())))
-                // TODO must expand these
-                .Or(Token.EqualTo(PromToken.IGNORING))
-                .Or(Token.EqualTo(PromToken.ON))
-                .Or(Token.EqualTo(PromToken.OFFSET))
+                // Inside of grouping options label names can be recognized as keywords by the lexer. This is a list of keywords that could also be a label name.
+                // See https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/generated_parser.y#L678 for more info.
+                .Or(Token.Matching<PromToken>(t => KeywordAndAlphanumericOperatorTokens.Contains(t), "operator"))
+            .Or(Token.EqualTo(PromToken.OFFSET))
             select id.ToStringValue();
         
         public static TokenListParser<PromToken, LabelMatcher> LabelMatcher =
@@ -318,8 +326,8 @@ namespace PromQL.Parser
              from head in OneOf(
                  // TODO can we optimize order here?
                  Parse.Ref(() => ParenExpression).Cast<PromToken, ParenExpression, Expr>(),
-                 Parse.Ref(() => AggregateExpr).Cast<PromToken, AggregateExpr, Expr>(),
-                 Parse.Ref(() => FunctionCall).Cast<PromToken, FunctionCall, Expr>(),
+                 Parse.Ref(() => AggregateExpr).Cast<PromToken, AggregateExpr, Expr>().Try(),
+                 Parse.Ref(() => FunctionCall).Cast<PromToken, FunctionCall, Expr>().Try(),
                  Number.Cast<PromToken, NumberLiteral, Expr>().Try(),
                  Parse.Ref(() => UnaryExpr).Cast<PromToken, UnaryExpr, Expr>(),
                  MatrixSelector.Cast<PromToken, MatrixSelector, Expr>().Try(),

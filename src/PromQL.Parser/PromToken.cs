@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Superpower.Display;
 
 namespace PromQL.Parser
@@ -19,7 +20,7 @@ namespace PromQL.Parser
 		[Token] COMMENT,
 		[Token] DURATION,
 
-		// TODO Don't currentl use error, could be useful for more informative error messages?
+		// TODO Don't currentl use error, could be useful for more informative error messages in the parser?
 		[Token] ERROR,
 
 		[Token] IDENTIFIER,
@@ -54,10 +55,10 @@ namespace PromQL.Parser
 		[Token(Category = "Operator", Example = ">")]
 		GTR,
 
-		[Token(Category = "Operator")]
+		[Token(Category = "Operator", Example = "and")]
 		LAND,
 
-		[Token(Category = "Operator")]
+		[Token(Category = "Operator", Example = "or")]
 		LOR,
 
 		[Token(Category = "Operator", Example = "<")]
@@ -66,7 +67,7 @@ namespace PromQL.Parser
 		[Token(Category = "Operator", Example = "<=")]
 		LTE,
 
-		[Token(Category = "Operator")]
+		[Token(Category = "Operator", Example = "unless")]
 		LUNLESS,
 
 		[Token(Category = "Operator", Example = "%")]
@@ -98,6 +99,7 @@ namespace PromQL.Parser
 		AGGREGATE_OP,
 
 		// Keywords
+		[Token(Category = "Keyword")]
 		BOOL,
 
 		[Token(Category = "Keyword")]
@@ -122,5 +124,6 @@ namespace PromQL.Parser
 		WITHOUT,
 
 		// Preprocessors
+		// TODO include these when we add support for @
 	}
 }
