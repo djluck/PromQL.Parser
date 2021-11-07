@@ -1,0 +1,19 @@
+name: publish-nuget-packages
+
+on: 
+  release:
+    types: [published, prereleased]
+
+jobs: 
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions/setup-dotnet@v1
+    - run: |
+        echo "Github ref is ${GITHUB_REF}"
+        arrTag=(${GITHUB_REF//\// })
+        VERSION="${arrTag[2]}"
+        echo "Version: $VERSION"
+        dotnet pack src/PromQL.Parser --include-symbols -c "Release" -p:Version=$VERSION  --output "build/"
+        dotnet nuget push "build/PromQL.Parser.*.symbols.nupkg" -k ${{ secrets.NUGET_API_KEY }} -s "https://api.nuget.org/v3/index.json" -n true

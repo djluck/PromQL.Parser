@@ -81,7 +81,7 @@ sum(1.0, "a string")
 
 ### Modifying PromQL expressions
 The Abstract Syntax Tree is represented using [`record` types](https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/record).
-This means making copies of the AST is trivial:
+This means making modified copies of the AST is trivial:
 ```csharp
 var expr = (BinaryExpr) Parser.ParseExpression(@"1 + 1");
 
