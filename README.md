@@ -1,4 +1,4 @@
-# PromQl.Parser
+# PromQL.Parser
 A parser for the Prometheus Query Language (PromQL), written in C# and using the [Superpower](https://github.com/datalust/superpower) parsing library.
 
 ## Installation
@@ -8,8 +8,8 @@ TODO
 
 
 ## User guide
-### Parsing and validating PromQl
-`Parser.ParseExpression` will parse a provided expression into an Abstract Syntax Tree (AST) that represents the PromQL components:
+### Parsing and validating PromQL
+`Parser.ParseExpression` will parse a provided expression into an Abstract Syntax Tree representation:
 
 ```csharp
 Parser.ParseExpression(@"
@@ -77,8 +77,6 @@ sum(1.0, "a string")
 
 # Binary operations not defined for strings
 "a" + "b"
-
-...
 ```
 
 ### Modifying PromQL expressions
@@ -106,11 +104,12 @@ An Abstract Syntax Tree can be converted back to its PromQL string representatio
 ```csharp
 var printer = new Printer();
 var expr = Parser.ParseExpression(@"
-# A comment
-sum(
-	avg_over_time(metric[1h:5m])
-) by (label1)
-");
+		# A comment
+		sum(
+			avg_over_time(metric[1h:5m])
+		) by (label1)
+	");
+		
 printer.ToPromQl(expr);
 ```
 
@@ -119,18 +118,20 @@ Produces:
 // NOTE:
 // 1. Comments are not preserved
 // 2. Whitespace/ indentation is not preserved
-// 3. Language elements may in a different order than originally specified
+// 3. Language elements may be in a different order than originally specified
 sum by (label1) (avg_over_time(metric[1h:5m]))
 ```
 
-### Creating PromQl expressions
-- Won't guard against creation of semantically invalid expressions
-- Won't guard against all forms of syntactically invalid expressions
+### Creating PromQL expressions
+You can directly manipulate the AST classes to build up PromQL expressions. However, there is currently very little in the way of checks that prevent
+you from either creating syntactically or semantically invalid expressions- use with care.
 
 ### Parsing extensions to PromQL
+This parser is reasonably extensible and can be modified to recognize extensions to the PromQL spec. 
+See [this test](https://github.com/djluck/PromQL.Parser/blob/master/tests/PromQL.Parser.Tests/ExtensibilityTests.cs) for an example on how to parse the `$__interval` extension Grafana uses.
 
 ## Unsupported language features
-This library aims to parse 99% of the PromQL language. However, some language features are currently unsupported:
+This library aims to parse 99% of the PromQL language and has [extensive test coverage](https://github.com/djluck/PromQL.Parser/blob/master/tests/PromQL.Parser.Tests/ParserTests.cs). However, some language features are currently unsupported:
 - Unicode string escaping
 - Hexadecimal/ octal string escaping
 - Hexadecimal number representation 
