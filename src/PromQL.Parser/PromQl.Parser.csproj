@@ -5,6 +5,16 @@
         <LangVersion>9</LangVersion>
         <Nullable>enable</Nullable>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <PackageId>PromQL.Parser</PackageId>
+        <Authors>James Luck</Authors>
+        <PackageTags>Prometheus PromQL PrometheusQueryLanguage parser</PackageTags>
+        <PackageProjectUrl>https://github.com/djluck/PromQL.Parser</PackageProjectUrl>
+        <Description>
+            A parser for the Prometheus Query Language (PromQL).
+        </Description>
+        <PackageLicense>https://github.com/djluck/PromQL.Parser/blob/master/LICENSE.txt</PackageLicense>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>CS1591</NoWarn>
     </PropertyGroup>
     
     <ItemGroup>

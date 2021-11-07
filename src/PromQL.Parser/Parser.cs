@@ -358,6 +358,7 @@ namespace PromQL.Parser
         /// Parse the specified input as a PromQL expression.
         /// </summary>
         /// <param name="input"></param>
+        /// <param name="tokenizer">Pass a customized tokenizer. By default, will create a new instance of <see cref="Tokenizer"/>.</param>
         /// <returns></returns>
         public static Expr ParseExpression(string input, Tokenizer? tokenizer = null)
         {
