@@ -11,7 +11,7 @@ TODO
 ### Parsing and validating PromQl
 `Parser.ParseExpression` will parse a provided expression into an Abstract Syntax Tree (AST) that represents the PromQL components:
 
-csharp```
+```csharp
 Parser.ParseExpression(@"
 	# This is a test expression
 	sum by (code) (rate(http_request_count{code !~ '5xx'}[1m]))
@@ -53,7 +53,7 @@ BinaryExpr {
 ```
 
 Invalid expressions will throw an exception:
-csharp```
+```csharp
 // Too many brackets + missing rest of matrix selector
 Parser.ParseExpression(@"http_request_count[[ ")
 ```
