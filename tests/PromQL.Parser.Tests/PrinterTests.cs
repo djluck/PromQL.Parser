@@ -151,6 +151,14 @@ namespace PromQL.Parser.Tests
             )).Should().Be("group_left (one, two)");
         }
 
+        [Test]
+        public void Offset_Negative()
+        {
+            _printer.ToPromQl(new OffsetExpr(new VectorSelector(new MetricIdentifier("foo")),
+                new Duration(TimeSpan.FromHours(-5))))
+                .Should().Be("foo offset -5h");
+        }
+
         // This expression doesn't have to be valid PromQL to be a useful test
         [Test]
         public void Complex_ToPromQl() =>

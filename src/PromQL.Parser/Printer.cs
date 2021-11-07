@@ -110,7 +110,17 @@ namespace PromQL.Parser
         {
             offset.Expr.Accept(this);
             _sb.Append(" offset ");
-            offset.Duration.Accept(this);
+
+            Duration d = offset.Duration;
+
+            if (d.Value < TimeSpan.Zero)
+            {
+                // Negative durations cannot be printed by the duration visitor. Convert to positive and emit sign here.
+                d = d with { Value = new TimeSpan(Math.Abs(d.Value.Ticks))};
+                _sb.Append("-");
+            }
+            
+            d.Accept(this);
         }
 
         public virtual void Visit(ParenExpression paren)

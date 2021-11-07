@@ -325,6 +325,57 @@ namespace PromQL.Parser.Tests
                 .MetricIdentifier.Value.Should().Be(input);
         }
         
+        [Test]
+        public void Expr_Complex()
+        {
+            var toParse =
+                "sum by(job, mode) (rate(node_cpu_seconds_total[1m])) / " +
+                "on(job) group_left sum by(job)(rate(node_cpu_seconds_total[1m]))";
+
+            Parse(Parser.Expr, toParse).Should().BeEquivalentTo(
+                new BinaryExpr(
+                    new AggregateExpr(
+                        "sum",
+                        new FunctionCall(
+                            "rate", 
+                            new Expr[]{
+                                new MatrixSelector(
+                                    new VectorSelector(new MetricIdentifier("node_cpu_seconds_total")),
+                                    new Duration(TimeSpan.FromMinutes(1))
+                                )
+                            }.ToImmutableArray()
+                        ),
+                        null, 
+                        new []{"job", "mode"}.ToImmutableArray(),
+                        false
+                    ),
+                    new AggregateExpr(
+                        "sum",
+                        new FunctionCall(
+                            "rate", 
+                            new Expr[]{
+                                new MatrixSelector(
+                                    new VectorSelector(new MetricIdentifier("node_cpu_seconds_total")),
+                                    new Duration(TimeSpan.FromMinutes(1))
+                                )
+                            }.ToImmutableArray()
+                        ),
+                        null, 
+                        new []{ "job" }.ToImmutableArray(),
+                        false
+                    ),
+                    Operators.Binary.Div,
+                    new VectorMatching(
+                        Operators.VectorMatchCardinality.ManyToOne, 
+                        new [] { "job"}.ToImmutableArray(),
+                        true,
+                        ImmutableArray<string>.Empty, 
+                        false
+                    )
+                )
+            );
+        }
+        
         // TODO probably need to expand upon our invalid test cases significantly
         [Test]
         public void Invalid_Expr()

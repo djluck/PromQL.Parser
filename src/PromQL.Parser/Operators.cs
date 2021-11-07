@@ -41,8 +41,17 @@ namespace PromQL.Parser
         /// </summary>
         public enum VectorMatchCardinality
         {
+            /// <summary>
+            /// Default matching behaviour- cardinality of both sides of a vector matching expression are equal.
+            /// </summary>
             OneToOne,
+            /// <summary>
+            /// AKA group_left
+            /// </summary>
             ManyToOne,
+            /// <summary>
+            /// AKA group_right
+            /// </summary>
             OneToMany
         }
         
