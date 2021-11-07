@@ -14,7 +14,7 @@
         </Description>
         <PackageLicense>https://github.com/djluck/PromQL.Parser/blob/master/LICENSE.txt</PackageLicense>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <NoWarn>CS1591</NoWarn>
+        <NoWarn>CS1591,CS1572,CS1573</NoWarn>
     </PropertyGroup>
     
     <ItemGroup>
