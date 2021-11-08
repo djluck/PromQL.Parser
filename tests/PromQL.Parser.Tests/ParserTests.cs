@@ -102,7 +102,7 @@ namespace PromQL.Parser.Tests
 
 
        [Test]
-       [TestCaseSource(nameof(FunctionsKeywordsAggregatesAndOperators))]
+       [TestCaseSource(nameof(FunctionsAggregatesAndOperators))]
        public void LabelValueMatcher_FunctionsOperatorsAndKeywords(string identifier) =>
            Parse(Parser.LabelValueMatcher, identifier).Should().Be(identifier);
 
@@ -316,13 +316,30 @@ namespace PromQL.Parser.Tests
             Parse(Parser.Expr, "+1").Should().Be(new NumberLiteral(1));
             Parse(Parser.Expr, "-1").Should().Be(new NumberLiteral(-1));
         }
-        
+
         [Test]
-        [TestCaseSource(nameof(FunctionsKeywordsAggregatesAndOperators))]
-        public void Expr_KeywordOrFunctionMetricIdentifier(string input)
+        [TestCaseSource(nameof(FunctionsAggregatesAndOperators))]
+        public void Expr_FunctionMetricIdentifier(string input)
         {
             Parse(Parser.Expr, input).Should().BeOfType<VectorSelector>().Which
                 .MetricIdentifier.Value.Should().Be(input);
+        }
+        
+        [Test]
+        public void Expr_NotKeywordMetricIdentifier()
+        {
+            Assert.Throws<ParseException>(() => Parse(Parser.Expr, "on {}"));
+        }
+        
+        [Test]
+        public void Expr_NameKeywordWorkaround()
+        {
+            Parse(Parser.Expr, "{__name__='on'}").Should().BeEquivalentTo(
+                new VectorSelector(new LabelMatchers(new []
+                {
+                    new LabelMatcher("__name__", Operators.LabelMatch.Equal, new StringLiteral('\'', "on"))
+                }.ToImmutableArray()))
+            );
         }
         
         [Test]
@@ -665,32 +682,58 @@ namespace PromQL.Parser.Tests
             }
         }
 
-        public static IEnumerable<string[]> FunctionsKeywordsAggregatesAndOperators()
-        {
-            // aggregate ops
-            yield return new [] {"avg"};
-            yield return new [] {"sum"};
-            yield return new [] {"quantile"};
-            yield return new [] {"max"};
-            yield return new [] {"min"};
-            
-            // functions
-            yield return new [] {"avg_over_time"};
-            yield return new [] {"time"};
-            yield return new [] {"rate"};
-            
-            // operators
-            yield return new [] {"or"};
-            yield return new [] {"and"};
-            yield return new [] {"unless"};
-            
-            // keywords
-            yield return new [] {"group_left"};
-            yield return new [] {"group_right"};
-            yield return new [] {"without"};
-            yield return new [] {"ignoring"};
-            yield return new [] {"by"};
-            yield return new [] {"bool"};
-        }
+         public static IEnumerable<string[]> FunctionsOperatorsAndAggregates()
+         {
+             // aggregate ops
+             yield return new[] {"avg"};
+             yield return new[] {"sum"};
+             yield return new[] {"quantile"};
+             yield return new[] {"max"};
+             yield return new[] {"min"};
+
+             // functions
+             yield return new[] {"avg_over_time"};
+             yield return new[] {"time"};
+             yield return new[] {"rate"};
+
+             // operators
+             yield return new[] {"or"};
+             yield return new[] {"and"};
+             yield return new[] {"unless"};
+         }
+
+         public static IEnumerable<string[]> FunctionsOperatorsAggregatesAndKeywords()
+         {
+             foreach (var s in FunctionsAggregatesAndOperators())
+                 yield return s;
+             
+             // keywords
+             yield return new[] {"group_left"};
+             yield return new[] {"group_right"};
+             yield return new[] {"without"};
+             yield return new[] {"ignoring"};
+             yield return new[] {"by"};
+             yield return new[] {"bool"};
+         }
+
+         public static IEnumerable<string[]> FunctionsAggregatesAndOperators()
+         {
+             // aggregate ops
+             yield return new[] {"avg"};
+             yield return new[] {"sum"};
+             yield return new[] {"quantile"};
+             yield return new[] {"max"};
+             yield return new[] {"min"};
+
+             // functions
+             yield return new[] {"avg_over_time"};
+             yield return new[] {"time"};
+             yield return new[] {"rate"};
+
+             // operators
+             yield return new[] {"or"};
+             yield return new[] {"and"};
+             yield return new[] {"unless"};
+         }
     }
 }

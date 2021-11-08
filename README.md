@@ -16,9 +16,9 @@ dotnet add package PromQL.Parser
 
 ```csharp
 Parser.ParseExpression(@"
-	# This is a test expression
-	sum by (code) (rate(http_request_count{code !~ '5xx'}[1m]))
-	/ sum by (code) (rate(http_request_count[1m]))
+    # This is a test expression
+    sum by (code) (rate(http_request_count{code !~ '5xx'}[1m]))
+    / sum by (code) (rate(http_request_count[1m]))
 ").ToString()
 ```
 
@@ -28,17 +28,38 @@ BinaryExpr {
   LeftHandSide = AggregateExpr { 
     OperatorName = sum, 
     Expr = FunctionCall { 
-      Identifier = rate, 
-      Args = System.Collections.Immutable.ImmutableArray`1[PromQL.Parser.Expr] }, 
-      Param = , 
-      GroupingLabels = System.Collections.Immutable.ImmutableArray`1[System.String], 
-      Without = False 
+      Identifier = rate,
+      Args = [ 
+        MatrixSelector { 
+          Vector = VectorSelector { 
+            MetricIdentifier = MetricIdentifier { Value = http_request_count }, 
+            LabelMatchers = LabelMatchers { 
+              Matchers = [ 
+                LabelMatcher { LabelName = code, Operator = NotRegexp, Value = StringLiteral { Quote = ', Value = 5xx } } 
+              ] 
+            } 
+          }, 
+          Duration = Duration { Value = 00:01:00 } 
+        } 
+      ] 
+    }, 
+    Param = , 
+    GroupingLabels = System.Collections.Immutable.ImmutableArray`1[System.String], 
+    Without = False 
   }, 
   RightHandSide = AggregateExpr { 
     OperatorName = sum, 
     Expr = FunctionCall { 
-      Identifier = rate, 
-      Args = System.Collections.Immutable.ImmutableArray`1[PromQL.Parser.Expr] 
+      Identifier = rate,
+      Args = [ 
+        MatrixSelector { 
+          Vector = VectorSelector { 
+            MetricIdentifier = MetricIdentifier { Value = http_request_count }, 
+            LabelMatchers =  
+          }, 
+          Duration = Duration { Value = 00:01:00 } 
+        } 
+      ]
     }, 
     Param = , 
     GroupingLabels = System.Collections.Immutable.ImmutableArray`1[System.String], 
@@ -47,15 +68,15 @@ BinaryExpr {
   Operator = Div, 
   VectorMatching = VectorMatching { 
     MatchCardinality = OneToOne, 
-    MatchingLabels = System.Collections.Immutable.ImmutableArray`1[System.String], 
-    On = False, 
-    Include = System.Collections.Immutable.ImmutableArray`1[System.String], 
-    ReturnBool = False 
+	MatchingLabels = System.Collections.Immutable.ImmutableArray`1[System.String], \
+	On = False, 
+	Include = System.Collections.Immutable.ImmutableArray`1[System.String], 
+	ReturnBool = False 
   } 
 }
 ```
 
-Invalid expressions will throw an exception:
+Invalid expressions will throw an exception, e.g:
 ```csharp
 // Too many brackets + missing rest of matrix selector
 Parser.ParseExpression("http_request_count[[ ")
@@ -107,12 +128,12 @@ An Abstract Syntax Tree can be converted back to its PromQL string representatio
 ```csharp
 var printer = new Printer();
 var expr = Parser.ParseExpression(@"
-		# A comment
-		sum(
-			avg_over_time(metric[1h:5m])
-		) by (label1)
-	");
-		
+        # A comment
+        sum(
+            avg_over_time(metric[1h:5m])
+        ) by (label1)
+    ");
+        
 printer.ToPromQl(expr);
 ```
 

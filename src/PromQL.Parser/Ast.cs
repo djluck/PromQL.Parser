@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Immutable;
+using System.Text;
 using ExhaustiveMatching;
 
 namespace PromQL.Parser.Ast
@@ -91,6 +92,15 @@ namespace PromQL.Parser.Ast
     public record FunctionCall(string Identifier, ImmutableArray<Expr> Args) : Expr
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+
+        protected virtual bool PrintMembers(StringBuilder builder)
+        {
+            builder.AppendLine($"{nameof(Identifier)} = {Identifier}, ");
+            builder.Append($"{nameof(Args)} = ");
+            Args.PrintArray(builder);
+            
+            return true;
+        }
     }
 
     public record ParenExpression(Expr Expr) : Expr
@@ -138,6 +148,14 @@ namespace PromQL.Parser.Ast
 
     public record LabelMatchers(ImmutableArray<LabelMatcher> Matchers) : IPromQlNode
     {
+        protected virtual bool PrintMembers(StringBuilder builder)
+        {
+            builder.Append($"{nameof(Matchers)} = ");
+            Matchers.PrintArray(builder);
+
+            return true;
+        }
+
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
@@ -169,5 +187,22 @@ namespace PromQL.Parser.Ast
     public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step) : Expr
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+    }
+    
+    internal static class Extensions
+    {
+        internal static void PrintArray<T>(this ImmutableArray<T> arr, StringBuilder sb)
+            where T : notnull
+        {
+            sb.Append("[ ");
+            for (int i = 0; i < arr.Length; i++)
+            {
+                sb.Append(arr[i].ToString());
+                if (i < arr.Length - 1)
+                    sb.Append(", ");
+            }
+
+            sb.Append(" ]");
+        } 
     }
 }
