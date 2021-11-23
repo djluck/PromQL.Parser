@@ -218,10 +218,10 @@ namespace PromQL.Parser
             select new ParenExpression(e);
 
         public static TokenListParser<PromToken, Expr[]> FunctionArgs = Parse.Ref(() => Expr).ManyDelimitedBy(Token.EqualTo(PromToken.COMMA))
-            .Between(Token.EqualTo(PromToken.LEFT_PAREN), Token.EqualTo(PromToken.RIGHT_PAREN));
+            .Between(Token.EqualTo(PromToken.LEFT_PAREN).Try(), Token.EqualTo(PromToken.RIGHT_PAREN));
         
         public static TokenListParser<PromToken, FunctionCall> FunctionCall =
-            from id in Token.EqualTo(PromToken.IDENTIFIER).Where(x => Functions.Names.Contains(x.ToStringValue()))
+            from id in Token.EqualTo(PromToken.IDENTIFIER).Where(x => Functions.Names.Contains(x.ToStringValue())).Try()
             from args in FunctionArgs
             select new FunctionCall(id.ToStringValue(), args.ToImmutableArray());
 
@@ -308,13 +308,13 @@ namespace PromQL.Parser
             select new BinaryExpr(lhs, rhs, BinaryOperatorMap[op.Kind], vm);
 
         public static TokenListParser<PromToken, (bool without, ImmutableArray<string> labels)> AggregateModifier =
-            from kind in Token.EqualTo(PromToken.BY)
-                .Or(Token.EqualTo(PromToken.WITHOUT))
+            from kind in Token.EqualTo(PromToken.BY).Try()
+                .Or(Token.EqualTo(PromToken.WITHOUT).Try())
             from labels in GroupingLabels
             select (kind.Kind == PromToken.WITHOUT, labels);
 
         public static TokenListParser<PromToken, AggregateExpr> AggregateExpr =
-            from op in Token.EqualTo(PromToken.AGGREGATE_OP).Where(x => Operators.Aggregates.Contains(x.Span.ToStringValue()))
+            from op in Token.EqualTo(PromToken.AGGREGATE_OP).Where(x => Operators.Aggregates.Contains(x.Span.ToStringValue())).Try()
             from argsAndMod in (
                 from args in FunctionArgs
                 from mod in AggregateModifier.OptionalOrDefault((without: false, labels: ImmutableArray<string>.Empty))
@@ -332,8 +332,8 @@ namespace PromQL.Parser
              from head in OneOf(
                  // TODO can we optimize order here?
                  Parse.Ref(() => ParenExpression).Cast<PromToken, ParenExpression, Expr>(),
-                 Parse.Ref(() => AggregateExpr).Cast<PromToken, AggregateExpr, Expr>().Try(),
-                 Parse.Ref(() => FunctionCall).Cast<PromToken, FunctionCall, Expr>().Try(),
+                 Parse.Ref(() => AggregateExpr).Cast<PromToken, AggregateExpr, Expr>(),
+                 Parse.Ref(() => FunctionCall).Cast<PromToken, FunctionCall, Expr>(),
                  Number.Cast<PromToken, NumberLiteral, Expr>().Try(),
                  Parse.Ref(() => UnaryExpr).Cast<PromToken, UnaryExpr, Expr>(),
                  MatrixSelector.Cast<PromToken, MatrixSelector, Expr>().Try(),

@@ -401,6 +401,15 @@ namespace PromQL.Parser.Tests
         }
         
         [Test]
+        public void Invalid_DurationExpr()
+        {
+            // Prior to this test, a very unhelpful error message would be returned (parsing would complain about an invalid
+            // opening parenthesis)
+            Assert.Throws<ParseException>(() => Parse(Parser.Expr, "sum(my_metric[window])")).Message
+                .Should().Be("Syntax error (line 1, column 15): unexpected identifier `window`, expected duration.");
+        }
+
+        [Test]
         public void ParseExpression_With_Comments()
         {
             Parser.ParseExpression(" #some comment \n 1 \n # another comment!").Should().Be(new NumberLiteral(1.0));
