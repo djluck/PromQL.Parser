@@ -334,11 +334,11 @@ namespace PromQL.Parser
                  Parse.Ref(() => ParenExpression).Cast<PromToken, ParenExpression, Expr>(),
                  Parse.Ref(() => AggregateExpr).Cast<PromToken, AggregateExpr, Expr>(),
                  Parse.Ref(() => FunctionCall).Cast<PromToken, FunctionCall, Expr>(),
-                 Number.Cast<PromToken, NumberLiteral, Expr>().Try(),
+                 Parse.Ref(() => Number).Cast<PromToken, NumberLiteral, Expr>().Try(),
                  Parse.Ref(() => UnaryExpr).Cast<PromToken, UnaryExpr, Expr>(),
-                 MatrixSelector.Cast<PromToken, MatrixSelector, Expr>().Try(),
-                 VectorSelector.Cast<PromToken, VectorSelector, Expr>(),
-                 StringLiteral.Cast<PromToken, StringLiteral, Expr>()
+                 Parse.Ref(() => MatrixSelector).Cast<PromToken, MatrixSelector, Expr>().Try(),
+                 Parse.Ref(() => VectorSelector).Cast<PromToken, VectorSelector, Expr>(),
+                 Parse.Ref(() => StringLiteral).Cast<PromToken, StringLiteral, Expr>()
              )
 #pragma warning disable CS8602
              from offsetOrSubquery in Parse.Ref(() => OffsetOrSubquery(head)).AsNullable().OptionalOrDefault()
