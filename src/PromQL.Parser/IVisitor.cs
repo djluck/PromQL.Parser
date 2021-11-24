@@ -27,6 +27,6 @@ namespace PromQL.Parser
         void Visit(BinaryExpr expr);
         void Visit(AggregateExpr expr);
         void Visit(VectorSelector vs);
-        void Visit(LabelMatchers fnCall);
+        void Visit(LabelMatchers lms);
     }
 }

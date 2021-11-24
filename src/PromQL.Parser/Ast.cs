@@ -19,7 +19,6 @@ namespace PromQL.Parser.Ast
     [Closed(
         typeof(AggregateExpr),
         typeof(BinaryExpr),
-        typeof(Duration),
         typeof(FunctionCall),
         typeof(MatrixSelector),
         typeof(NumberLiteral),
@@ -174,7 +173,7 @@ namespace PromQL.Parser.Ast
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record Duration(TimeSpan Value) : Expr
+    public record Duration(TimeSpan Value) : IPromQlNode 
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
