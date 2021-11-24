@@ -42,6 +42,16 @@ namespace PromQL.Parser.Ast
     public record AggregateExpr(string OperatorName, Expr Expr, Expr? Param,
         ImmutableArray<string> GroupingLabels, bool Without) : Expr
     {
+        public AggregateExpr(string operatorName, Expr expr)
+            : this (operatorName, expr, null, ImmutableArray<string>.Empty, false)
+        {
+        }
+
+        public AggregateExpr(string operatorName, Expr expr, Expr param, bool without = false, params string[] groupingLabels)
+            : this (operatorName, expr, param, groupingLabels.ToImmutableArray(), without)
+        {
+        }
+        
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
@@ -53,7 +63,7 @@ namespace PromQL.Parser.Ast
     /// <param name="Operator">The operation of the expression</param>
     /// <param name="VectorMatching">The matching behavior for the operation to be applied if both operands are Vectors.</param>
     public record BinaryExpr(Expr LeftHandSide, Expr RightHandSide, Operators.Binary Operator,
-        VectorMatching? VectorMatching) : Expr
+        VectorMatching? VectorMatching = null) : Expr
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
@@ -90,6 +100,11 @@ namespace PromQL.Parser.Ast
     /// <param name="Args">Arguments used in the call.</param>
     public record FunctionCall(string Identifier, ImmutableArray<Expr> Args) : Expr
     {
+        public FunctionCall(string identifier, params Expr[] args) 
+            : this (identifier, args.ToImmutableArray())
+        {
+        }
+        
         public void Accept(IVisitor visitor) => visitor.Visit(this);
 
         protected virtual bool PrintMembers(StringBuilder builder)
@@ -183,7 +198,7 @@ namespace PromQL.Parser.Ast
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step) : Expr
+    public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step = null) : Expr
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
