@@ -122,6 +122,7 @@ BinaryExpr {
   VectorMatching = ...
 }
 ```
+All non-value AST types are mutable and can also be updated in place using a visitor such as `DepthFirstExpressionVisitor`.
 
 ### Emitting PromQL expressions
 An Abstract Syntax Tree can be converted back to its PromQL string representation, e.g:

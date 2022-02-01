@@ -52,6 +52,12 @@ namespace PromQL.Parser.Ast
         {
         }
         
+        public string OperatorName { get; set;} = OperatorName;
+        public Expr Expr { get; set;} = Expr;
+        public Expr? Param { get; set;} = Param;
+        public ImmutableArray<string> GroupingLabels { get; set;} = GroupingLabels;
+        public bool Without { get; set;} = Without;
+        
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
@@ -65,6 +71,10 @@ namespace PromQL.Parser.Ast
     public record BinaryExpr(Expr LeftHandSide, Expr RightHandSide, Operators.Binary Operator,
         VectorMatching? VectorMatching = null) : Expr
     {
+        public Expr LeftHandSide { get; set; } = LeftHandSide;
+        public Expr RightHandSide { get; set; } = RightHandSide;
+        public Operators.Binary Operator { get; set; } = Operator;
+        public VectorMatching? VectorMatching { get; set; } = VectorMatching;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
@@ -89,6 +99,11 @@ namespace PromQL.Parser.Ast
         public VectorMatching(bool returnBool) : this (DefaultMatchCardinality, ImmutableArray<string>.Empty, false, ImmutableArray<string>.Empty, returnBool  )
         {
         }
+
+        public Operators.VectorMatchCardinality MatchCardinality { get; set; } = MatchCardinality;
+        public bool On { get; set; } = On;
+        public ImmutableArray<string> Include { get; set; } = Include;
+        public bool ReturnBool { get; set; } = ReturnBool;
         
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     };
@@ -104,6 +119,9 @@ namespace PromQL.Parser.Ast
             : this (identifier, args.ToImmutableArray())
         {
         }
+
+        public string Identifier { get; set; } = Identifier;
+        public ImmutableArray<Expr> Args { get; set; } = Args;
         
         public void Accept(IVisitor visitor) => visitor.Visit(this);
 
@@ -119,21 +137,29 @@ namespace PromQL.Parser.Ast
 
     public record ParenExpression(Expr Expr) : Expr
     {
+        public Expr Expr { get; set; } = Expr;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
     public record OffsetExpr(Expr Expr, Duration Duration) : Expr
     {
+        public Expr Expr { get; set; } = Expr;
+        public Duration Duration { get; set; } = Duration;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
     public record MatrixSelector(VectorSelector Vector, Duration Duration) : Expr
     {
+        public VectorSelector Vector { get; set; } =Vector;
+        public Duration Duration { get; set; } = Duration;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
     public record UnaryExpr(Operators.Unary Operator, Expr Expr) : Expr
     {
+        public Operators.Unary Operator { get; set; } = Operator;
+        public Expr Expr { get; set; } = Expr;
+        
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
     
@@ -155,8 +181,8 @@ namespace PromQL.Parser.Ast
             LabelMatchers = labelMatchers;
         }
         
-        public MetricIdentifier? MetricIdentifier { get; }
-        public LabelMatchers? LabelMatchers { get; }
+        public MetricIdentifier? MetricIdentifier { get; set; }
+        public LabelMatchers? LabelMatchers { get; set; }
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
@@ -169,6 +195,8 @@ namespace PromQL.Parser.Ast
 
             return true;
         }
+
+        public ImmutableArray<LabelMatcher> Matchers { get; set; } = Matchers;
 
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
@@ -200,6 +228,10 @@ namespace PromQL.Parser.Ast
 
     public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step = null) : Expr
     {
+        public Expr Expr { get; set; } = Expr;
+        public Duration Range { get; set; } = Range;
+        public Duration? Step { get; set; } = Step;
+        
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
     
