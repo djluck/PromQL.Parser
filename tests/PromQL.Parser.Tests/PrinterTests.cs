@@ -181,13 +181,13 @@ namespace PromQL.Parser.Tests
                 ),
                 new UnaryExpr(
                     Operators.Unary.Sub,
-                    new FunctionCall("sum", new Expr[]
+                    new FunctionCall(Functions.Map["vector"], new Expr[]
                     {
                         new OffsetExpr(new VectorSelector(new MetricIdentifier("this_is_a_metric")), new Duration(TimeSpan.FromMinutes(5)))
                     }.ToImmutableArray())
                 ),
                 Operators.Binary.Add,
                 null
-            )).Should().Be("(another_metric{one='test', two!='test2'}[1h][1d:5m]) + -sum(this_is_a_metric offset 5m)");
+            )).Should().Be("(another_metric{one='test', two!='test2'}[1h][1d:5m]) + -vector(this_is_a_metric offset 5m)");
     }
 }

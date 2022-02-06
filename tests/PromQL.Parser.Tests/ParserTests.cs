@@ -258,7 +258,7 @@ namespace PromQL.Parser.Tests
 
         [Test]
         public void FunctionCall_Empty() => Parse(Parser.FunctionCall, "time ()")
-            .Should().Be(new FunctionCall("time", ImmutableArray<Expr>.Empty));
+            .Should().Be(new FunctionCall(Functions.Map["time"], ImmutableArray<Expr>.Empty));
 
         [Test]
         public void FunctionCall_InvalidFunction()
@@ -269,21 +269,21 @@ namespace PromQL.Parser.Tests
         [Test]
         public void FunctionCall_OneArg() => Parse(Parser.Expr, "abs (1)")
             .Should().BeEquivalentTo(
-                new FunctionCall("abs", new Expr[] { new NumberLiteral(1.0) }.ToImmutableArray())
+                new FunctionCall(Functions.Map["abs"], new Expr[] { new NumberLiteral(1.0) }.ToImmutableArray())
             );
         
         [Test]
         // NOTE: we do not either validate the parameter count or types of functions 
         public void FunctionCall_MultiArg() => Parse(Parser.Expr, "abs (1, 2)")
             .Should().BeEquivalentTo(
-                new FunctionCall("abs", new Expr[] { new NumberLiteral(1.0), new NumberLiteral(2.0) }.ToImmutableArray())
+                new FunctionCall(Functions.Map["abs"], new Expr[] { new NumberLiteral(1.0), new NumberLiteral(2.0) }.ToImmutableArray())
             );
         
         [Test]
         // NOTE: we do not either validate the parameter count or types of functions 
         public void FunctionCall_SnakeCase() => Parse(Parser.Expr, "absent_over_time (metric_name )")
             .Should().BeEquivalentTo(
-                new FunctionCall("absent_over_time", new Expr[] { new VectorSelector(new MetricIdentifier("metric_name")) }.ToImmutableArray())
+                new FunctionCall(Functions.Map["absent_over_time"], new Expr[] { new VectorSelector(new MetricIdentifier("metric_name")) }.ToImmutableArray())
             );
 
         [Test]
@@ -354,7 +354,7 @@ namespace PromQL.Parser.Tests
                     new AggregateExpr(
                         "sum",
                         new FunctionCall(
-                            "rate", 
+                            Functions.Map["rate"], 
                             new Expr[]{
                                 new MatrixSelector(
                                     new VectorSelector(new MetricIdentifier("node_cpu_seconds_total")),
@@ -369,7 +369,7 @@ namespace PromQL.Parser.Tests
                     new AggregateExpr(
                         "sum",
                         new FunctionCall(
-                            "rate", 
+                            Functions.Map["rate"], 
                             new Expr[]{
                                 new MatrixSelector(
                                     new VectorSelector(new MetricIdentifier("node_cpu_seconds_total")),

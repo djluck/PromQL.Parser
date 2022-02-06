@@ -2,6 +2,7 @@ using System;
 using System.Collections.Immutable;
 using System.Text;
 using ExhaustiveMatching;
+using Superpower.Model;
 
 namespace PromQL.Parser.Ast
 {
@@ -11,6 +12,7 @@ namespace PromQL.Parser.Ast
     public interface IPromQlNode
     {
         void Accept(IVisitor visitor);
+        Position? Position { get; }
     }
 
     /// <summary>
@@ -29,7 +31,10 @@ namespace PromQL.Parser.Ast
         typeof(UnaryExpr),
         typeof(VectorSelector)
     )]
-    public interface Expr : IPromQlNode {}
+    public interface Expr : IPromQlNode
+    {
+        ValueType Type { get; }
+    }
 
     /// <summary>
     /// Represents an aggregation operation on a Vector.
@@ -40,7 +45,7 @@ namespace PromQL.Parser.Ast
     /// <param name="GroupingLabels">The labels by which to group the Vector.</param>
     /// <param name="Without"> Whether to drop the given labels rather than keep them.</param>
     public record AggregateExpr(string OperatorName, Expr Expr, Expr? Param,
-        ImmutableArray<string> GroupingLabels, bool Without) : Expr
+        ImmutableArray<string> GroupingLabels, bool Without, Position? Position = null) : Expr
     {
         public AggregateExpr(string operatorName, Expr expr)
             : this (operatorName, expr, null, ImmutableArray<string>.Empty, false)
@@ -57,6 +62,8 @@ namespace PromQL.Parser.Ast
         public Expr? Param { get; set;} = Param;
         public ImmutableArray<string> GroupingLabels { get; set;} = GroupingLabels;
         public bool Without { get; set;} = Without;
+
+        public ValueType Type => ValueType.Vector;
         
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
@@ -69,13 +76,24 @@ namespace PromQL.Parser.Ast
     /// <param name="Operator">The operation of the expression</param>
     /// <param name="VectorMatching">The matching behavior for the operation to be applied if both operands are Vectors.</param>
     public record BinaryExpr(Expr LeftHandSide, Expr RightHandSide, Operators.Binary Operator,
-        VectorMatching? VectorMatching = null) : Expr
+        VectorMatching? VectorMatching = null, Position? Position = null) : Expr
     {
         public Expr LeftHandSide { get; set; } = LeftHandSide;
         public Expr RightHandSide { get; set; } = RightHandSide;
         public Operators.Binary Operator { get; set; } = Operator;
         public VectorMatching? VectorMatching { get; set; } = VectorMatching;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+
+        public ValueType Type
+        {
+            get
+            {
+                if (RightHandSide.Type == ValueType.Scalar && LeftHandSide.Type == ValueType.Scalar)
+                    return ValueType.Scalar;
+
+                return ValueType.Vector;
+            }
+        }
     }
 
     /// <summary>
@@ -87,7 +105,7 @@ namespace PromQL.Parser.Ast
     /// <param name="Include">Contains additional labels that should be included in the result from the side with the lower cardinality.</param>
     /// <param name="ReturnBool">If a comparison operator, return 0/1 rather than filtering.</param>
     public record VectorMatching(Operators.VectorMatchCardinality MatchCardinality, ImmutableArray<string> MatchingLabels,
-        bool On, ImmutableArray<string> Include, bool ReturnBool) : IPromQlNode
+        bool On, ImmutableArray<string> Include, bool ReturnBool, Position? Position = null) : IPromQlNode
     {
         public static Operators.VectorMatchCardinality DefaultMatchCardinality { get; } = Operators.VectorMatchCardinality.OneToOne;
 
@@ -104,89 +122,93 @@ namespace PromQL.Parser.Ast
         public bool On { get; set; } = On;
         public ImmutableArray<string> Include { get; set; } = Include;
         public bool ReturnBool { get; set; } = ReturnBool;
-        
+
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     };
 
     /// <summary>
     /// A function call.
     /// </summary>
-    /// <param name="Identifier">The function that was called.</param>
+    /// <param name="Function">The function that was called.</param>
     /// <param name="Args">Arguments used in the call.</param>
-    public record FunctionCall(string Identifier, ImmutableArray<Expr> Args) : Expr
+    public record FunctionCall(Function Function, ImmutableArray<Expr> Args, Position? Position = null) : Expr
     {
-        public FunctionCall(string identifier, params Expr[] args) 
-            : this (identifier, args.ToImmutableArray())
+        public FunctionCall(Function function, params Expr[] args) 
+            : this (function, args.ToImmutableArray())
         {
         }
 
-        public string Identifier { get; set; } = Identifier;
+        public Function Function { get; set; } = Function;
         public ImmutableArray<Expr> Args { get; set; } = Args;
-        
-        public void Accept(IVisitor visitor) => visitor.Visit(this);
 
-        protected virtual bool PrintMembers(StringBuilder builder)
-        {
-            builder.AppendLine($"{nameof(Identifier)} = {Identifier}, ");
-            builder.Append($"{nameof(Args)} = ");
-            Args.PrintArray(builder);
-            
-            return true;
-        }
+        public ValueType Type => Function.ReturnType;
+
+        public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record ParenExpression(Expr Expr) : Expr
+    public record ParenExpression(Expr Expr, Position? Position = null) : Expr
     {
         public Expr Expr { get; set; } = Expr;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+        public ValueType Type => Expr.Type;
     }
 
-    public record OffsetExpr(Expr Expr, Duration Duration) : Expr
+    public record OffsetExpr(Expr Expr, Duration Duration, Position? Position = null) : Expr
     {
         public Expr Expr { get; set; } = Expr;
         public Duration Duration { get; set; } = Duration;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+        public ValueType Type => Expr.Type;
     }
 
-    public record MatrixSelector(VectorSelector Vector, Duration Duration) : Expr
+    public record MatrixSelector(VectorSelector Vector, Duration Duration, Position? Position = null) : Expr
     {
         public VectorSelector Vector { get; set; } =Vector;
         public Duration Duration { get; set; } = Duration;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+        public ValueType Type => ValueType.Matrix;
     }
 
-    public record UnaryExpr(Operators.Unary Operator, Expr Expr) : Expr
+    public record UnaryExpr(Operators.Unary Operator, Expr Expr, Position? Position = null) : Expr
     {
         public Operators.Unary Operator { get; set; } = Operator;
         public Expr Expr { get; set; } = Expr;
         
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+        public ValueType Type => Expr.Type;
     }
     
     public record VectorSelector : Expr
     {
-        public VectorSelector(MetricIdentifier metricIdentifier)
+        public VectorSelector(MetricIdentifier metricIdentifier, Position? position = null)
         {
             MetricIdentifier = metricIdentifier;
+            Position = position;
         }
 
-        public VectorSelector(LabelMatchers labelMatchers)
+        public VectorSelector(LabelMatchers labelMatchers, Position? position = null)
         {
             LabelMatchers = labelMatchers;
+            Position = position;
         }
         
-        public VectorSelector(MetricIdentifier metricIdentifier, LabelMatchers labelMatchers)
+        public VectorSelector(MetricIdentifier metricIdentifier, LabelMatchers labelMatchers, Position? position = null)
         {
+            
             MetricIdentifier = metricIdentifier;
             LabelMatchers = labelMatchers;
+            Position = position;
         }
         
         public MetricIdentifier? MetricIdentifier { get; set; }
         public LabelMatchers? LabelMatchers { get; set; }
+        public Position? Position { get; }
+        public ValueType Type => ValueType.Vector;
+        
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record LabelMatchers(ImmutableArray<LabelMatcher> Matchers) : IPromQlNode
+    public record LabelMatchers(ImmutableArray<LabelMatcher> Matchers, Position? Position = null) : IPromQlNode
     {
         protected virtual bool PrintMembers(StringBuilder builder)
         {
@@ -201,36 +223,39 @@ namespace PromQL.Parser.Ast
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record LabelMatcher(string LabelName, Operators.LabelMatch Operator, StringLiteral Value) : IPromQlNode
+    public record LabelMatcher(string LabelName, Operators.LabelMatch Operator, StringLiteral Value, Position? Position = null) : IPromQlNode
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record MetricIdentifier(string Value) : IPromQlNode
+    public record MetricIdentifier(string Value, Position? Position = null) : IPromQlNode
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record NumberLiteral(double Value) : Expr
+    public record NumberLiteral(double Value, Position? Position = null) : Expr
+    {
+        public void Accept(IVisitor visitor) => visitor.Visit(this);
+        public ValueType Type => ValueType.Scalar;
+    }
+
+    public record Duration(TimeSpan Value, Position? Position = null) : IPromQlNode 
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record Duration(TimeSpan Value) : IPromQlNode 
+    public record StringLiteral(char Quote, string Value, Position? Position = null) : Expr
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+        public ValueType Type => ValueType.String;
     }
 
-    public record StringLiteral(char Quote, string Value) : Expr
-    {
-        public void Accept(IVisitor visitor) => visitor.Visit(this);
-    }
-
-    public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step = null) : Expr
+    public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step = null, Position? Position = null) : Expr
     {
         public Expr Expr { get; set; } = Expr;
         public Duration Range { get; set; } = Range;
         public Duration? Step { get; set; } = Step;
+        public ValueType Type => ValueType.Matrix;
         
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }

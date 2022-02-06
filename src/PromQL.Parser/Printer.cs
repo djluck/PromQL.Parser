@@ -132,7 +132,7 @@ namespace PromQL.Parser
 
         public virtual void Visit(FunctionCall fnCall)
         {
-            _sb.Append($"{fnCall.Identifier}(");
+            _sb.Append($"{fnCall.Function.Name}(");
 
             bool isFirst = true;
             foreach (var arg in fnCall.Args)

@@ -221,9 +221,9 @@ namespace PromQL.Parser
             .Between(Token.EqualTo(PromToken.LEFT_PAREN).Try(), Token.EqualTo(PromToken.RIGHT_PAREN));
         
         public static TokenListParser<PromToken, FunctionCall> FunctionCall =
-            from id in Token.EqualTo(PromToken.IDENTIFIER).Where(x => Functions.Names.Contains(x.ToStringValue())).Try()
+            from id in Token.EqualTo(PromToken.IDENTIFIER).Where(x => Functions.Map.ContainsKey(x.ToStringValue())).Try()
             from args in FunctionArgs
-            select new FunctionCall(id.ToStringValue(), args.ToImmutableArray());
+            select new FunctionCall(Functions.Map[id.ToStringValue()], args.ToImmutableArray());
 
 
         public static TokenListParser<PromToken, ImmutableArray<string>> GroupingLabels =
