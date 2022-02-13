@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Linq;
 using FluentAssertions;
 using NUnit.Framework;
 using PromQL.Parser.Ast;
 using Superpower;
-using Superpower.Display;
 using Superpower.Model;
 
 namespace PromQL.Parser.Tests
@@ -25,11 +23,11 @@ namespace PromQL.Parser.Tests
         
         [Test]
         public void StringLiteralDoubleQuote() => Parse(Parser.StringLiteral, "\"A string\"")
-            .Should().Be(new StringLiteral('"', "A string"));
+            .Should().Be(new StringLiteral('"', "A string", new TextSpan("\"A string\"")));
         
         [Test]
         public void StringLiteralDoubleQuoteEscaped() => Parse(Parser.StringLiteral, @"""\a\b\f\n\r\t\v\\\""""")
-            .Should().Be(new StringLiteral('"', "\a\b\f\n\r\t\v\\\""));
+            .Should().Be(new StringLiteral('"', "\a\b\f\n\r\t\v\\\"", new TextSpan(@"""\a\b\f\n\r\t\v\\\""""")));
         
         [Test]
         public void StringLiteralDoubleQuoteNewline() => 
@@ -37,11 +35,11 @@ namespace PromQL.Parser.Tests
         
         [Test]
         public void StringLiteralSingleQuote() => Parse(Parser.StringLiteral, "'A string'")
-            .Should().Be(new StringLiteral('\'', "A string"));
+            .Should().Be(new StringLiteral('\'', "A string", new TextSpan("'A string'")));
 
         [Test]
         public void StringLiteralSingleQuoteEscaped() => Parse(Parser.StringLiteral, @"'\a\b\f\n\r\t\v\\\''")
-            .Should().Be(new StringLiteral('\'', "\a\b\f\n\r\t\v\\\'"));
+            .Should().Be(new StringLiteral('\'', "\a\b\f\n\r\t\v\\\'", new TextSpan(@"'\a\b\f\n\r\t\v\\\''")));
         
         [Test]
         public void StringLiteralSingleQuoteNewline() => 
@@ -49,15 +47,15 @@ namespace PromQL.Parser.Tests
         
         [Test]
         public void StringLiteralRaw() => Parse(Parser.StringLiteral, "`A string`")
-            .Should().Be(new StringLiteral('`', "A string"));
+            .Should().Be(new StringLiteral('`', "A string", new TextSpan("`A string`")));
         
         [Test]
         public void StringLiteralRaw_Multiline() => Parse(Parser.StringLiteral, "`A\n string`")
-            .Should().Be(new StringLiteral('`', "A\n string"));
+            .Should().Be(new StringLiteral('`', "A\n string", new TextSpan("`A\n string`")));
 
         [Test]
         public void StringLiteralRaw_NoEscapes() => Parse(Parser.StringLiteral, @"`\a\b\f\n\r\t\v`")
-            .Should().Be(new StringLiteral('`', @"\a\b\f\n\r\t\v"));
+            .Should().Be(new StringLiteral('`', @"\a\b\f\n\r\t\v", new TextSpan(@"`\a\b\f\n\r\t\v`")));
         
         [Test]
         [TestCase("2y52w365d25h10m30s100ms", "1460.01:10:30.100")]
@@ -67,7 +65,7 @@ namespace PromQL.Parser.Tests
         [TestCase("180s", "00:03:00")]
         [TestCase("500ms", "00:00:00.500")]
         public void Duration(string input, string expected) => Parse(Parser.Duration, input)
-            .Should().Be(new Duration(TimeSpan.Parse(expected)));
+            .Should().Be(new Duration(TimeSpan.Parse(expected), new TextSpan(input)));
         
         
         [Test]
@@ -80,37 +78,38 @@ namespace PromQL.Parser.Tests
         [TestCase("1e5", 100000)]
         [TestCase("1.55E+5", 155000)]
         public void Number(string input, double expected) => Parse(Parser.Number, input)
-            .Should().Be(new NumberLiteral(expected));
+            .Should().Be(new NumberLiteral(expected, new TextSpan(input)));
         
         [Test]
         [TestCase("nan")]
         [TestCase("NaN")]
         public void Number_NaN(string input) => Parse(Parser.Number, input)
-            .Should().Be(new NumberLiteral(double.NaN));
+            .Should().Be(new NumberLiteral(double.NaN, new TextSpan(input)));
         
        [Test]
        [TestCase("Inf")]
        [TestCase("+inf")]
        public void Number_InfPos(string input) => Parse(Parser.Number, input)
-           .Should().Be(new NumberLiteral(double.PositiveInfinity));
+           .Should().Be(new NumberLiteral(double.PositiveInfinity, new TextSpan(input)));
        
        [Test]
        [TestCase("-Inf")]
        [TestCase("-inf")]
        public void Number_InfNeg(string input) => Parse(Parser.Number, input)
-           .Should().Be(new NumberLiteral(double.NegativeInfinity));
+           .Should().Be(new NumberLiteral(double.NegativeInfinity, new TextSpan(input)));
 
 
        [Test]
        [TestCaseSource(nameof(FunctionsAggregatesAndOperators))]
        public void LabelValueMatcher_FunctionsOperatorsAndKeywords(string identifier) =>
-           Parse(Parser.LabelValueMatcher, identifier).Should().Be(identifier);
+           Parse(Parser.LabelValueMatcher, identifier).Value.Should().Be(identifier);
 
         [Test]
         public void LabelMatchers_Empty()
         {
-            Parse(Parser.LabelMatchers, "{}")
-                .Should().Be(new LabelMatchers(ImmutableArray<LabelMatcher>.Empty));
+            const string input = "{}";
+            Parse(Parser.LabelMatchers, input)
+                .Should().Be(new LabelMatchers(ImmutableArray<LabelMatcher>.Empty, new TextSpan(input)));
         }
 
         [Test]
@@ -122,86 +121,143 @@ namespace PromQL.Parser.Tests
         [Test]
         public void LabelMatchers_One()
         {
-            Parse(Parser.LabelMatchers, "{blah=\"my_label\"}")
-                .Should().BeEquivalentTo(new LabelMatchers(new []
-                {
-                    new LabelMatcher("blah", Operators.LabelMatch.Equal, new StringLiteral('"', "my_label"))   
-                }.ToImmutableArray()));
+            const string input = "{blah=\"my_label\"}";
+            Parse(Parser.LabelMatchers, input)
+                .Should().BeEquivalentTo(
+                    new LabelMatchers(new []
+                        {
+                            new LabelMatcher(
+                                "blah", 
+                                Operators.LabelMatch.Equal, 
+                                new StringLiteral('"', "my_label", new TextSpan(input, new Position(6, 0, 0), 10)),
+                                new TextSpan(input, new Position(1, 0, 0), 15)
+                            )   
+                        }.ToImmutableArray(),
+                        Span: new TextSpan(input)
+                    )
+                );
         }
 
         [Test]
         public void LabelMatchers_OneTrailingComma()
         {
-            Parse(Parser.LabelMatchers, "{blah=\"my_label\" , }")
-                .Should().BeEquivalentTo(new LabelMatchers(new[]
-                {
-                    new LabelMatcher("blah", Operators.LabelMatch.Equal, new StringLiteral('"', "my_label"))
-                }.ToImmutableArray()));
+            const string input = "{blah=\"my_label\" , }";
+            Parse(Parser.LabelMatchers, input)
+                .Should().BeEquivalentTo(
+                    new LabelMatchers(
+                        new[]
+                        {
+                            new LabelMatcher(
+                                "blah", 
+                                Operators.LabelMatch.Equal, 
+                                new StringLiteral('"', "my_label", new TextSpan(input, new Position(6, 0, 0), 10)),
+                                new TextSpan(input, new Position(1, 0, 0), 15)
+                            ),
+                        }.ToImmutableArray(),
+                        new TextSpan(input)
+                    )
+                );
         }
         
         [Test]
         public void LabelMatchers_Many()
         {
             Parse(Parser.LabelMatchers, "{ blah=\"my_label\", blah_123 != 'my_label', b123=~'label', b_!~'label' }")
-                .Should().BeEquivalentTo(new LabelMatchers(new []
-                {
-                    new LabelMatcher("blah", Operators.LabelMatch.Equal, new StringLiteral('"', "my_label")),
-                    new LabelMatcher("blah_123", Operators.LabelMatch.NotEqual, new StringLiteral('\'', "my_label")),
-                    new LabelMatcher("b123", Operators.LabelMatch.Regexp, new StringLiteral('\'', "label")),
-                    new LabelMatcher("b_", Operators.LabelMatch.NotRegexp, new StringLiteral('\'', "label"))
-                }.ToImmutableArray()));
+                .Should().BeEquivalentTo(
+                    new LabelMatchers(
+                        new []
+                        {
+                            new LabelMatcher("blah", Operators.LabelMatch.Equal, new StringLiteral('"', "my_label")),
+                            new LabelMatcher("blah_123", Operators.LabelMatch.NotEqual, new StringLiteral('\'', "my_label")),
+                            new LabelMatcher("b123", Operators.LabelMatch.Regexp, new StringLiteral('\'', "label")),
+                            new LabelMatcher("b_", Operators.LabelMatch.NotRegexp, new StringLiteral('\'', "label"))
+                        }.ToImmutableArray()
+                    ),
+                    // Don't assert over parsed Span positions, will be tedious to specify all positions
+                    cfg => cfg.Excluding(x => x.Name == "Span")
+                );
         }
         
         [Test]
         public void VectorSelector_MetricIdentifier()
         {
-            Parse(Parser.VectorSelector, ":this_is_a_metric")
-                .Should().BeEquivalentTo(new VectorSelector(new MetricIdentifier(":this_is_a_metric")));
+            const string input = ":this_is_a_metric";
+            Parse(Parser.VectorSelector, input)
+                .Should().BeEquivalentTo(
+                    new VectorSelector(new MetricIdentifier(input, new TextSpan(input)), new TextSpan(input))
+                );
         }
         
         [Test]
         public void VectorSelector_MetricIdentifier_And_LabelMatchers()
         {
-            Parse(Parser.VectorSelector, ":this_is_a_metric { }")
-                .Should().BeEquivalentTo(new VectorSelector(new MetricIdentifier(":this_is_a_metric"), new LabelMatchers(ImmutableArray<LabelMatcher>.Empty)));
+            const string input = ":this_is_a_metric { }";
+            Parse(Parser.VectorSelector, input)
+                .Should().BeEquivalentTo(
+                    new VectorSelector(
+                        new MetricIdentifier(":this_is_a_metric", new TextSpan(input, new Position(0, 0, 0), 17)),
+                        new LabelMatchers(ImmutableArray<LabelMatcher>.Empty, new TextSpan(input, new Position(18, 0, 0), 3)),
+                        new TextSpan(input)
+                    )
+                );
         }
         
         [Test]
         public void VectorSelector_LabelMatchers()
         {
-            Parse(Parser.VectorSelector, "{ }")
-                .Should().BeEquivalentTo(new VectorSelector(new LabelMatchers(ImmutableArray<LabelMatcher>.Empty)));
+            const string input = "{ }";
+            Parse(Parser.VectorSelector, input)
+                .Should().BeEquivalentTo(
+                    new VectorSelector(
+                        new LabelMatchers(ImmutableArray<LabelMatcher>.Empty, new TextSpan(input)),
+                        new TextSpan(input)
+                    )
+                );
         }
 
         [Test]
-        public void MatrixSelector() => Parse(Parser.MatrixSelector, " metric { } [ 1m1s ] ")
-            .Should().Be(new MatrixSelector(
-                new VectorSelector(new MetricIdentifier("metric"), new LabelMatchers(ImmutableArray<LabelMatcher>.Empty)),
-                new Duration(new TimeSpan(0, 1, 1))
-            ));
+        public void MatrixSelector()
+        {
+            var input = "metric { } [ 1m1s ]";
+            Parse(Parser.MatrixSelector, input)
+                .Should().Be(new MatrixSelector(
+                    new VectorSelector(
+                        new MetricIdentifier("metric", new TextSpan(input, Position.Zero, 6)), 
+                        new LabelMatchers(ImmutableArray<LabelMatcher>.Empty, new TextSpan(input, new Position(7, 0, 0), 3)),
+                        new TextSpan(input, Position.Zero, 10)
+                    ),
+                    new Duration(new TimeSpan(0, 1, 1), new TextSpan(input, new Position(13, 0, 0), 4)),
+                    new TextSpan(input)
+                ));
+        }
 
         [Test]
         public void Offset_Vector()
         {
-            var expr = Parse(Parser.Expr, " metric { } offset 1m");
+            const string input = "metric { } offset 1m";
+            var expr = Parse(Parser.Expr, input);
             var offsetExpr = expr.Should().BeOfType<OffsetExpr>().Subject;
             offsetExpr.Expr.Should().BeOfType<VectorSelector>();
             offsetExpr.Duration.Value.Should().Be(TimeSpan.FromMinutes(1));
+            offsetExpr.Span.Should().Be(new TextSpan(input));
         } 
         
         [Test]
         public void Offset_MatrixSelector()
         {
-            var expr = Parse(Parser.Expr, " metric { } [ 1m1s ] offset -7m");
+            const string input = "metric { } [ 1m1s ] offset -7m";
+            var expr = Parse(Parser.Expr, input);
             var offsetExpr = expr.Should().BeOfType<OffsetExpr>().Subject;
             offsetExpr.Expr.Should().BeOfType<MatrixSelector>();
             offsetExpr.Duration.Value.Should().Be(TimeSpan.FromMinutes(-7));
+            offsetExpr.Span.Should().Be(new TextSpan(input));
         } 
         
         [Test]
         public void Offset_Subquery()
         {
-            var expr = Parse(Parser.Expr, " metric[ 1h:1m ] offset 1w");
+            var input = "metric[ 1h:1m ] offset 1w";
+            var expr = Parse(Parser.Expr, input);
             expr.Should().BeEquivalentTo(
                 new OffsetExpr(
                     new SubqueryExpr(
@@ -210,14 +266,18 @@ namespace PromQL.Parser.Tests
                         new Duration(TimeSpan.FromMinutes(1))
                     ),
                     new Duration(TimeSpan.FromDays(7))
-                )
+                ),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+                cfg => cfg.Excluding(x => x.Name == "Span")
             );
+            expr.Span.Should().Be(new TextSpan(input));
         } 
         
         [Test]
         public void Subquery_Offset()
         {
-            var expr = Parse(Parser.Expr, " metric offset 1w [ 1h:1m ]");
+            const string input = "metric offset 1w [ 1h:1m ]";
+            var expr = Parse(Parser.Expr, input);
             expr.Should().BeEquivalentTo(
                 new SubqueryExpr(
                     new OffsetExpr(
@@ -226,8 +286,11 @@ namespace PromQL.Parser.Tests
                     ),
                     new Duration(TimeSpan.FromHours(1)),
                     new Duration(TimeSpan.FromMinutes(1))
-                )
+                ),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+                cfg => cfg.Excluding(x => x.Name == "Span")
             );
+            expr.Span.Should().Be(new TextSpan(input));
         } 
         
         [Test]
@@ -246,20 +309,45 @@ namespace PromQL.Parser.Tests
         public void ParenExpr_MissingRight()
         {
             Assert.Throws<ParseException>(() => Parse(Parser.Expr, " (( 1 ) "));
-        } 
-        
-        [Test]
-        public void ParenExpr_Simple() => Parse(Parser.Expr, " (1) ")
-            .Should().Be(new ParenExpression(new NumberLiteral(1.0)));
-        
-        [Test]
-        public void ParenExpr_Nested() => Parse(Parser.Expr, " ((1)) ")
-            .Should().Be(new ParenExpression(new ParenExpression(new NumberLiteral(1.0))));
+        }
 
         [Test]
-        public void FunctionCall_Empty() => Parse(Parser.FunctionCall, "time ()")
-            .Should().Be(new FunctionCall(Functions.Map["time"], ImmutableArray<Expr>.Empty));
+        public void ParenExpr_Simple()
+        {
+            var input = " (1) ";
+            var parsed = Parse(Parser.Expr, input)
+                .Should().Be(
+                    new ParenExpression(
+                        new NumberLiteral(1.0, new TextSpan(input, new Position(2, 0, 0), 1)),
+                        new TextSpan(input, new Position(1, 0, 0), 3)
+                    )
+                );
+        }
 
+        [Test]
+        public void ParenExpr_Nested()
+        {
+            var input = "((1))";
+            var parsed = Parse(Parser.Expr, input)
+                .Should().Be(
+                    new ParenExpression(
+                        new ParenExpression(
+                            new NumberLiteral(1.0, new TextSpan(input, new Position(2, 0, 0), 1)),
+                            new TextSpan(input, new Position(1, 0, 0), 3)
+                        ),
+                        new TextSpan(input)
+                    )
+                );
+        }
+
+        [Test]
+        public void FunctionCall_Empty()
+        {
+            var input = "time ()";
+            Parse(Parser.FunctionCall, input)
+                .Should().Be(new FunctionCall(Functions.Map["time"], ImmutableArray<Expr>.Empty, new TextSpan(input)));
+        }
+        
         [Test]
         public void FunctionCall_InvalidFunction()
         {
@@ -269,36 +357,62 @@ namespace PromQL.Parser.Tests
         [Test]
         public void FunctionCall_OneArg() => Parse(Parser.Expr, "abs (1)")
             .Should().BeEquivalentTo(
-                new FunctionCall(Functions.Map["abs"], new Expr[] { new NumberLiteral(1.0) }.ToImmutableArray())
+                new FunctionCall(Functions.Map["abs"], new Expr[] { new NumberLiteral(1.0) }.ToImmutableArray()),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+                cfg => cfg.Excluding(x => x.Name == "Span")
             );
         
         [Test]
         // NOTE: we do not either validate the parameter count or types of functions 
         public void FunctionCall_MultiArg() => Parse(Parser.Expr, "abs (1, 2)")
             .Should().BeEquivalentTo(
-                new FunctionCall(Functions.Map["abs"], new Expr[] { new NumberLiteral(1.0), new NumberLiteral(2.0) }.ToImmutableArray())
+                new FunctionCall(Functions.Map["abs"], new Expr[] { new NumberLiteral(1.0), new NumberLiteral(2.0) }.ToImmutableArray()),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+                cfg => cfg.Excluding(x => x.Name == "Span")
             );
         
         [Test]
         // NOTE: we do not either validate the parameter count or types of functions 
         public void FunctionCall_SnakeCase() => Parse(Parser.Expr, "absent_over_time (metric_name )")
             .Should().BeEquivalentTo(
-                new FunctionCall(Functions.Map["absent_over_time"], new Expr[] { new VectorSelector(new MetricIdentifier("metric_name")) }.ToImmutableArray())
+                new FunctionCall(Functions.Map["absent_over_time"], new Expr[] { new VectorSelector(new MetricIdentifier("metric_name")) }.ToImmutableArray()),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+                cfg => cfg.Excluding(x => x.Name == "Span")
             );
 
         [Test]
-        public void UnaryExpr_Plus() => Parse(Parser.UnaryExpr, "+1")
-            .Should().Be(new UnaryExpr(Operators.Unary.Add, new NumberLiteral(1.0)));
+        public void UnaryExpr_Plus()
+        {
+            const string input = "+1";
+            Parse(Parser.UnaryExpr, input)
+                .Should().Be(
+                    new UnaryExpr(
+                        Operators.Unary.Add, 
+                        new NumberLiteral(1.0, new TextSpan(input, new Position(1, 0 , 0), 1)), 
+                        new TextSpan(input)
+                    )
+                );
+        }
         
         [Test]
-        public void UnaryExpr_Minus() => Parse(Parser.UnaryExpr, "-1")
-            .Should().Be(new UnaryExpr(Operators.Unary.Sub, new NumberLiteral(1.0)));
-        
+        public void UnaryExpr_Minus()
+        {
+            const string input = "-1";
+            Parse(Parser.UnaryExpr, input)
+                .Should().Be(
+                    new UnaryExpr(
+                        Operators.Unary.Sub, 
+                        new NumberLiteral(1.0, new TextSpan(input, new Position(1, 0 , 0), 1)), 
+                        new TextSpan(input)
+                    )
+                );
+        }
+
         [Test]
         public void Expr()
         {
-            Parse(Parser.Expr, "'a string'").Should().Be(new StringLiteral('\'', "a string"));
-            Parse(Parser.Expr, "1").Should().Be(new NumberLiteral(1.0));
+            Parse(Parser.Expr, "'a string'").Should().BeOfType<StringLiteral>();
+            Parse(Parser.Expr, "1").Should().BeOfType<NumberLiteral>();
             Parse(Parser.Expr, "1 + 1").Should().BeOfType<BinaryExpr>();
             Parse(Parser.Expr, "sum (some_expr)").Should().BeOfType<AggregateExpr>();
             Parse(Parser.Expr, "some_expr[1d:]").Should().BeOfType<SubqueryExpr>();
@@ -313,8 +427,8 @@ namespace PromQL.Parser.Tests
         public void Expr_NumberWithSign()
         {
             // Make sure we don't parse this as a unary expression!
-            Parse(Parser.Expr, "+1").Should().Be(new NumberLiteral(1));
-            Parse(Parser.Expr, "-1").Should().Be(new NumberLiteral(-1));
+            Parse(Parser.Expr, "+1").Should().Be(new NumberLiteral(1, new TextSpan("+1")));
+            Parse(Parser.Expr, "-1").Should().Be(new NumberLiteral(-1, new TextSpan("-1")));
         }
 
         [Test]
@@ -338,7 +452,9 @@ namespace PromQL.Parser.Tests
                 new VectorSelector(new LabelMatchers(new []
                 {
                     new LabelMatcher("__name__", Operators.LabelMatch.Equal, new StringLiteral('\'', "on"))
-                }.ToImmutableArray()))
+                }.ToImmutableArray())),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+                cfg => cfg.Excluding(x => x.Name == "Span")
             );
         }
         
@@ -389,7 +505,9 @@ namespace PromQL.Parser.Tests
                         ImmutableArray<string>.Empty, 
                         false
                     )
-                )
+                ),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+                cfg => cfg.Excluding(x => x.Name == "Span")
             );
         }
         
@@ -412,7 +530,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void ParseExpression_With_Comments()
         {
-            Parser.ParseExpression(" #some comment \n 1 \n # another comment!").Should().Be(new NumberLiteral(1.0));
+            Parser.ParseExpression(" #some comment \n 1 \n # another comment!").Should().BeOfType<NumberLiteral>();
         }
 
         [Test]
@@ -423,85 +541,131 @@ namespace PromQL.Parser.Tests
 
         [Test]
         public void GroupingLabels_Empty() => Parse(Parser.GroupingLabels, " ( )")
-            .Should().BeEmpty();
+            .Value.Should().BeEmpty();
         
         [Test]
         public void GroupingLabels_One() => Parse(Parser.GroupingLabels, " ( one ) ")
-            .Should().Equal("one");
-        
-        [Test]
-        public void GroupingLabels_Many() => Parse(Parser.GroupingLabels, " ( one, two, three ) ")
-            .Should().Equal("one", "two", "three");
+            .Value.Should().Equal("one");
 
         [Test]
-        public void VectorMatching_Bool() => Parse(Parser.VectorMatching, "bool")
-            .Should().BeEquivalentTo(new VectorMatching(
-                Operators.VectorMatchCardinality.OneToOne, 
-                ImmutableArray<string>.Empty, 
-                false, 
-                ImmutableArray<string>.Empty, 
-                true)
-            );
-        
-        [Test]
-        public void VectorMatching_Ignoring() => Parse(Parser.VectorMatching, "ignoring (one, two)")
-            .Should().BeEquivalentTo(new VectorMatching(
-                Operators.VectorMatchCardinality.OneToOne, 
-                new [] { "one", "two" }.ToImmutableArray(), 
-                false, 
-                ImmutableArray<string>.Empty, 
-                false)
-            );
+        public void GroupingLabels_Many()
+        {
+            var parsed = Parse(Parser.GroupingLabels, " ( one, two, three ) ");
+            parsed.Value.Should().Equal("one", "two", "three");
+            parsed.Span.ToString().Should().Be("( one, two, three )");
+        }
 
         [Test]
-        public void VectorMatching_On() => Parse(Parser.VectorMatching, "on ()")
-            .Should().BeEquivalentTo(new VectorMatching(
-                Operators.VectorMatchCardinality.OneToOne, 
-                ImmutableArray<string>.Empty,  
-                true, 
-                ImmutableArray<string>.Empty, 
-                false)
-            );
-        
+        public void VectorMatching_Bool()
+        {
+            const string input = "bool";
+            Parse(Parser.VectorMatching, input)
+                .Should().BeEquivalentTo(new VectorMatching(
+                    Operators.VectorMatchCardinality.OneToOne,
+                    ImmutableArray<string>.Empty,
+                    false,
+                    ImmutableArray<string>.Empty,
+                    true,
+                    new TextSpan(input))
+                );
+        }
+
         [Test]
-        public void VectorMatching_Bool_On() => Parse(Parser.VectorMatching, "bool on ()")
-            .Should().BeEquivalentTo(new VectorMatching(
-                Operators.VectorMatchCardinality.OneToOne, 
-                ImmutableArray<string>.Empty,  
-                true, 
-                ImmutableArray<string>.Empty, 
-                true)
-            );
-        
+        public void VectorMatching_Ignoring()
+        {
+            const string input = "ignoring (one, two)";
+            
+            Parse(Parser.VectorMatching, input)
+                .Should().BeEquivalentTo(new VectorMatching(
+                    Operators.VectorMatchCardinality.OneToOne,
+                    new[] {"one", "two"}.ToImmutableArray(),
+                    false,
+                    ImmutableArray<string>.Empty,
+                    false,
+                    new TextSpan(input))
+                );
+        }
+
         [Test]
-        public void VectorMatching_GroupLeft() => Parse(Parser.VectorMatching, "on () group_left ()")
-            .Should().BeEquivalentTo(new VectorMatching(
-                Operators.VectorMatchCardinality.ManyToOne, 
-                ImmutableArray<string>.Empty,  
-                true, 
-                ImmutableArray<string>.Empty, 
-                false)
-            );
-        
+        public void VectorMatching_On()
+        {
+            const string input = "on ()";
+            
+            Parse(Parser.VectorMatching, input)
+                .Should().BeEquivalentTo(new VectorMatching(
+                    Operators.VectorMatchCardinality.OneToOne,
+                    ImmutableArray<string>.Empty,
+                    true,
+                    ImmutableArray<string>.Empty,
+                    false,
+                    new TextSpan(input))
+                );
+        }
+
         [Test]
-        public void VectorMatching_GroupLeftEmpty() => Parse(Parser.VectorMatching, "on () group_left")
-            .Should().BeEquivalentTo(new VectorMatching(
-                Operators.VectorMatchCardinality.ManyToOne, 
-                ImmutableArray<string>.Empty,  
-                true, 
-                ImmutableArray<string>.Empty, 
-                false)
-            );
-        
+        public void VectorMatching_Bool_On()
+        {
+            const string input = "bool on ()";
+            Parse(Parser.VectorMatching, input)
+                .Should().BeEquivalentTo(new VectorMatching(
+                    Operators.VectorMatchCardinality.OneToOne,
+                        ImmutableArray<string>.Empty,
+                        true,
+                        ImmutableArray<string>.Empty,
+                        true,
+                        new TextSpan(input)
+                    )
+                );
+        }
+
         [Test]
-        public void VectorMatching_GroupRight() => Parse(Parser.VectorMatching, "on () group_right (one, two)")
-            .Should().BeEquivalentTo(new VectorMatching(
-                Operators.VectorMatchCardinality.OneToMany, 
-                ImmutableArray<string>.Empty,  
-                true, 
-                new []{ "one","two"}.ToImmutableArray(), 
-                false)
-            );
+        public void VectorMatching_GroupLeft()
+        {
+            const string input = "on () group_left ()";
+            Parse(Parser.VectorMatching, input)
+                .Should().BeEquivalentTo(new VectorMatching(
+                    Operators.VectorMatchCardinality.ManyToOne,
+                        ImmutableArray<string>.Empty,
+                        true,
+                        ImmutableArray<string>.Empty,
+                        false,
+                        new TextSpan(input)
+                    )
+                );
+        }
+
+        [Test]
+        public void VectorMatching_GroupLeftEmpty()
+        {
+            const string input = "on () group_left";
+            
+            Parse(Parser.VectorMatching, input)
+                .Should().BeEquivalentTo(new VectorMatching(
+                    Operators.VectorMatchCardinality.ManyToOne,
+                    ImmutableArray<string>.Empty,
+                    true,
+                    ImmutableArray<string>.Empty,
+                    false,
+                    new TextSpan(input))
+                );
+        }
+
+        [Test]
+        public void VectorMatching_GroupRight()
+        {
+            const string input = "on () group_right (one, two)";
+            Parse(Parser.VectorMatching, input)
+                .Should().BeEquivalentTo(
+                    new VectorMatching(
+                        Operators.VectorMatchCardinality.OneToMany, 
+                        ImmutableArray<string>.Empty,  
+                        true, 
+                        new []{ "one","two"}.ToImmutableArray(), 
+                        false,
+                        new TextSpan(input)
+                    )
+                );
+        } 
         
         [Test]
         [TestCase("group_left ()")]
@@ -529,7 +693,9 @@ namespace PromQL.Parser.Tests
         [TestCase("1 unless 1", Operators.Binary.Unless)]
         public void BinaryExpr_Operators(string input, Operators.Binary expected)
         {
-            Parse(Parser.BinaryExpr, input).As<BinaryExpr>().Operator.Should().Be(expected);
+            var parsed = Parse(Parser.BinaryExpr, input).As<BinaryExpr>();
+            parsed.Operator.Should().Be(expected);
+            parsed.Span.Should().Be(new TextSpan(input));
         }
         
         [Test]
@@ -544,18 +710,22 @@ namespace PromQL.Parser.Tests
                     }.ToImmutableArray())),
                     Operators.Binary.Add,
                     new VectorMatching()
-                ));
+                    ),
+                    // Don't assert over parsed Span positions, will be tedious to specify all positions
+                    cfg => cfg.Excluding(x => x.Name == "Span")
+                );
         }
         
         [Test]
         public void BinaryExpr_Repetitive()
         {
-            var result = Parse(Parser.BinaryExpr, "1 + 2 + 3") as BinaryExpr;
-            result.LeftHandSide.Should().Be(new NumberLiteral(1.0));
+            var input = "1 + 2 + 3";
+            var result = Parse(Parser.BinaryExpr, input) as BinaryExpr;
+            result.LeftHandSide.Should().Be(new NumberLiteral(1.0, new TextSpan(input, new Position(0, 0, 0), 1)));
             var binExpr = result.RightHandSide.Should().BeOfType<BinaryExpr>();
             
-            binExpr.Which.LeftHandSide.Should().Be(new NumberLiteral(2.0));
-            binExpr.Which.RightHandSide.Should().Be(new NumberLiteral(3.0));
+            binExpr.Which.LeftHandSide.Should().Be(new NumberLiteral(2.0, new TextSpan(input, new Position(4, 0, 0), 1)));
+            binExpr.Which.RightHandSide.Should().Be(new NumberLiteral(3.0, new TextSpan(input, new Position(8, 0, 0), 1)));
         }
         
         [Test]
@@ -566,7 +736,7 @@ namespace PromQL.Parser.Tests
                 .Expr.Should().BeOfType<BinaryExpr>().Which
                 .LeftHandSide.Should().BeOfType<ParenExpression>().Which
                 .Expr.Should().BeOfType<BinaryExpr>().Which
-                .LeftHandSide.Should().Be(new NumberLiteral(1.0));
+                .LeftHandSide.Should().BeOfType<NumberLiteral>().Subject.Value.Should().Be(1);
             
             Parse(Parser.Expr, "(100 * (1) / 128)");
         }
@@ -576,11 +746,14 @@ namespace PromQL.Parser.Tests
         {
             Parse(Parser.BinaryExpr, "1 + bool 2")
                 .Should().BeEquivalentTo(new BinaryExpr(
-                    new NumberLiteral(1.0),
-                    new NumberLiteral(2),
-                    Operators.Binary.Add,
-                    new VectorMatching(true)
-                ));
+                        new NumberLiteral(1.0),
+                        new NumberLiteral(2),
+                        Operators.Binary.Add,
+                        new VectorMatching(true)
+                    ),
+                    // Don't assert over parsed Span positions, will be tedious to specify all positions
+                    cfg => cfg.Excluding(x => x.Name == "Span")
+                );
         }
 
         [Test]
@@ -600,35 +773,66 @@ namespace PromQL.Parser.Tests
             .OperatorName.Should().Be(expected);
 
         [Test]
-        public void AggregateExpr_NoMod() => Parse(Parser.AggregateExpr, "sum (blah)").Should().BeEquivalentTo(
-            new AggregateExpr(
-                "sum",
-                new VectorSelector(new MetricIdentifier("blah")),
-                null,
-                ImmutableArray<string>.Empty, 
-                false
-            ));
-        
+        public void AggregateExpr_NoMod()
+        {
+            const string input = "sum (blah)";
+            
+            var result = Parse(Parser.AggregateExpr, input);
+            result.Should().BeEquivalentTo(
+                new AggregateExpr(
+                        "sum",
+                        new VectorSelector(new MetricIdentifier("blah")),
+                        null,
+                        ImmutableArray<string>.Empty,
+                        false
+                    ),
+                    // Don't assert over parsed Span positions, will be tedious to specify all positions
+                    cfg => cfg.Excluding(x => x.Name == "Span")
+                );
+
+            result.Span.Should().Be(new TextSpan(input));
+        }
+
         [Test]
-        public void AggregateExpr_LeadingModBy() => Parse(Parser.AggregateExpr, "sum by (one, two) (blah)").Should().BeEquivalentTo(
-            new AggregateExpr(
-                "sum",
-                new VectorSelector(new MetricIdentifier("blah")),
-                null,
-                new string[] {"one", "two"}.ToImmutableArray(),
-                false
-            ));
-        
+        public void AggregateExpr_LeadingModBy()
+        {
+            const string input = "sum by (one, two) (blah)";
+            var result = Parse(Parser.AggregateExpr, input);
+            
+            result.Should().BeEquivalentTo(
+                new AggregateExpr(
+                    "sum",
+                    new VectorSelector(new MetricIdentifier("blah")),
+                    null,
+                    new string[] {"one", "two"}.ToImmutableArray(),
+                    false
+                ),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+                cfg => cfg.Excluding(x => x.Name == "Span")
+            );
+            result.Span.Should().Be(new TextSpan(input));
+        }
+
         [Test]
-        public void AggregateExpr_TrailingModWithout() => Parse(Parser.AggregateExpr, "sum (blah) without (one)").Should().BeEquivalentTo(
-            new AggregateExpr(
-                "sum",
-                new VectorSelector(new MetricIdentifier("blah")),
-                null,
-                new string[] {"one" }.ToImmutableArray(),
-                true
-            ));
-        
+        public void AggregateExpr_TrailingModWithout()
+        {
+            const string input = "sum (blah) without (one)";
+
+            var result = Parse(Parser.AggregateExpr, input);
+            result.Should().BeEquivalentTo(
+                new AggregateExpr(
+                    "sum",
+                    new VectorSelector(new MetricIdentifier("blah")),
+                    null,
+                    new string[] {"one"}.ToImmutableArray(),
+                    true
+                ),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+                cfg => cfg.Excluding(x => x.Name == "Span")
+            );
+            result.Span.Should().Be(new TextSpan(input));
+        }
+
         [Test]
         public void AggregateExpr_TwoArgs() => Parse(Parser.AggregateExpr, "quantile (0.5, blah)").Should().BeEquivalentTo(
             new AggregateExpr(
@@ -637,7 +841,10 @@ namespace PromQL.Parser.Tests
                 new NumberLiteral(0.5),
                 ImmutableArray<string>.Empty, 
                 false
-            ));
+            ),
+            // Don't assert over parsed Span positions, will be tedious to specify all positions
+            cfg => cfg.Excluding(x => x.Name == "Span")
+        );
         
         [Test]
         public void AggregateExpr_LabelNameAggOp()
@@ -646,38 +853,58 @@ namespace PromQL.Parser.Tests
         }
 
         [Test]
-        public void Subquery_WithStep() => Parse(Parser.Expr, "blah[1h:1m]").Should().BeEquivalentTo(
-            new SubqueryExpr(
-                new VectorSelector(new MetricIdentifier("blah")),
-                new Duration(TimeSpan.FromHours(1)),
-                new Duration(TimeSpan.FromMinutes(1))
-            ));
-         
-         [Test]
-         public void Subquery_WithoutStep() => Parse(Parser.Expr, "blah[1d:]").Should().BeEquivalentTo(
-             new SubqueryExpr(
-                 new VectorSelector(new MetricIdentifier("blah")),
-                 new Duration(TimeSpan.FromDays(1)),
-                 null
-             ));
+        public void Subquery_WithStep()
+        {
+            const string input = "blah[1h:1m]";
+            var result = Parse(Parser.Expr, input);
+            
+            result.Should().BeEquivalentTo(
+                new SubqueryExpr(
+                    new VectorSelector(new MetricIdentifier("blah")),
+                    new Duration(TimeSpan.FromHours(1)),
+                    new Duration(TimeSpan.FromMinutes(1))
+                ),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+            cfg => cfg.Excluding(x => x.Name == "Span")
+            );
+            result.Span.Should().Be(new TextSpan(input));
+        }
 
-         [Test]
-         public void Subquery_Expressions()
-         {
-             Parse(Parser.Expr, "vector(1) [1h:]").Should().BeOfType<SubqueryExpr>().Which
+        [Test]
+        public void Subquery_WithoutStep()
+        {
+            const string input = "blah[1d:]";
+            var result = Parse(Parser.Expr, input);
+            
+            result.Should().BeEquivalentTo(
+                new SubqueryExpr(
+                    new VectorSelector(new MetricIdentifier("blah")),
+                    new Duration(TimeSpan.FromDays(1)),
+                    null
+                ),
+                // Don't assert over parsed Span positions, will be tedious to specify all positions
+                cfg => cfg.Excluding(x => x.Name == "Span")
+            );
+            result.Span.Should().Be(new TextSpan(input));
+        }
+
+        [Test]
+        public void Subquery_Expressions()
+        {
+            Parse(Parser.Expr, "vector(1) [1h:]").Should().BeOfType<SubqueryExpr>().Which
                  .Expr.Should().BeOfType<FunctionCall>();
-             
-             Parse(Parser.Expr, "1 + 1 [1h:]").Should().BeOfType<BinaryExpr>().Which
-                 .RightHandSide.Should().BeOfType<SubqueryExpr>();
-             
-             Parse(Parser.Expr, "(1 + 1) [1h:]").Should().BeOfType<SubqueryExpr>().Which
-                 .Expr.Should().BeOfType<ParenExpression>();
-             
-             Parse(Parser.Expr, "blah{} [1h:]").Should().BeOfType<SubqueryExpr>().Which
-                 .Expr.Should().BeOfType<VectorSelector>();
-         }
 
-         public static T Parse<T>(TokenListParser<PromToken, T> parser, string input)
+            Parse(Parser.Expr, "1 + 1 [1h:]").Should().BeOfType<BinaryExpr>().Which
+                 .RightHandSide.Should().BeOfType<SubqueryExpr>();
+
+            Parse(Parser.Expr, "(1 + 1) [1h:]").Should().BeOfType<SubqueryExpr>().Which
+                 .Expr.Should().BeOfType<ParenExpression>();
+
+            Parse(Parser.Expr, "blah{} [1h:]").Should().BeOfType<SubqueryExpr>().Which
+                .Expr.Should().BeOfType<VectorSelector>();
+        }
+
+        public static T Parse<T>(TokenListParser<PromToken, T> parser, string input)
         {
             var tokens = new Tokenizer().Tokenize(input);
             try

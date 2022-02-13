@@ -14,6 +14,7 @@ namespace PromQL.Parser
         /// </remarks>
         public static ImmutableDictionary<string, Function> Map { get; set; } = new[]
         {
+            new Function("absent", ValueType.Vector, ValueType.Vector),
             new Function("absent_over_time", ValueType.Vector, ValueType.Matrix),
             new Function("abs", ValueType.Vector, ValueType.Vector),
             new Function("acos", ValueType.Vector, ValueType.Vector),

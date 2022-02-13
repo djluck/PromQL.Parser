@@ -4,6 +4,8 @@ using PromQL.Parser.Ast;
 
 namespace PromQL.Parser
 {
+    // TODO fix bug around "and"
+    // TODO pretty print support
     public class Printer : IVisitor
     {
         private StringBuilder _sb = new ();

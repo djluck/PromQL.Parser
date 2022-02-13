@@ -20,15 +20,15 @@ namespace PromQL.Parser
     /// </summary>
     public static class Parser
     {
-        public static TokenListParser<PromToken, Operators.Unary> UnaryOperator =
-            Token.EqualTo(PromToken.ADD).Select(_ => Operators.Unary.Add).Or(
-                Token.EqualTo(PromToken.SUB).Select(_ => Operators.Unary.Sub)
+        public static TokenListParser<PromToken, ParsedValue<Operators.Unary>> UnaryOperator =
+            Token.EqualTo(PromToken.ADD).Select(t => Operators.Unary.Add.ToParsedValue(t.Span)).Or(
+                Token.EqualTo(PromToken.SUB).Select(t => Operators.Unary.Sub.ToParsedValue(t.Span))
             );
         
         public static TokenListParser<PromToken, UnaryExpr> UnaryExpr =
             from op in Parse.Ref(() => UnaryOperator)
             from expr in Parse.Ref(() => Expr)
-            select new UnaryExpr(op, expr);
+            select new UnaryExpr(op.Value, expr, op.Span.UntilEnd(expr.Span));
         
         private static IEnumerable<PromToken> FindTokensMatching(Func<TokenAttribute, bool> predicate) => typeof(PromToken).GetMembers()
             .Select(enumMember => (enumMember, attr: enumMember.GetCustomAttributes(typeof(TokenAttribute), false).Cast<TokenAttribute>().SingleOrDefault()))
@@ -48,7 +48,7 @@ namespace PromQL.Parser
                 .Or(Token.EqualTo(PromToken.IDENTIFIER))
                 .Or(Token.EqualTo(PromToken.AGGREGATE_OP).Where(t => Operators.Aggregates.Contains(t.ToStringValue()), "aggregate_op"))
                 .Or(Token.Matching<PromToken>(t => AlphanumericOperatorTokens.Contains(t), "operator"))
-            select new MetricIdentifier(id.ToStringValue());
+            select new MetricIdentifier(id.ToStringValue(), id.Span);
 
         public static TokenListParser<PromToken, LabelMatchers> LabelMatchers =
             from lb in Token.EqualTo(PromToken.LEFT_BRACE)
@@ -63,38 +63,40 @@ namespace PromQL.Parser
                 select new [] { matcherHead }.Concat(matcherTail)
             ).OptionalOrDefault(Array.Empty<LabelMatcher>())
             from rb in Token.EqualTo(PromToken.RIGHT_BRACE)
-            select new LabelMatchers(matchers.ToImmutableArray());
+            select new LabelMatchers(matchers.ToImmutableArray(), lb.Span.UntilEnd(rb.Span));
         
         public static TokenListParser<PromToken, VectorSelector> VectorSelector =
         (
             from m in MetricIdentifier
             from lm in LabelMatchers.AsNullable().OptionalOrDefault()
-            select new VectorSelector(m, lm)
+            select new VectorSelector(m, lm, lm != null ? m.Span!.Value.UntilEnd(lm.Span) : m.Span!)
         ).Or(
             from lm in LabelMatchers
-            select new VectorSelector(lm)
+            select new VectorSelector(lm, lm.Span)
         );
 
         public static TokenListParser<PromToken, MatrixSelector> MatrixSelector =
             from vs in VectorSelector
-            from d in Parse.Ref(() => Duration).Between(Token.EqualTo(PromToken.LEFT_BRACKET), Token.EqualTo(PromToken.RIGHT_BRACKET))
-            select new MatrixSelector(vs, d);
+            from lb in Token.EqualTo(PromToken.LEFT_BRACKET)
+            from d in Parse.Ref(() => Duration)
+            from rb in Token.EqualTo(PromToken.RIGHT_BRACKET)
+            select new MatrixSelector(vs, d, vs.Span!.Value.UntilEnd(rb.Span));
 
         // TODO see https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/generated_parser.y#L679
-        public static TokenListParser<PromToken, string> LabelValueMatcher =
+        public static TokenListParser<PromToken, ParsedValue<string>> LabelValueMatcher =
             from id in Token.EqualTo(PromToken.IDENTIFIER)
                 .Or(Token.EqualTo(PromToken.AGGREGATE_OP).Where(x => Operators.Aggregates.Contains(x.ToStringValue())))
                 // Inside of grouping options label names can be recognized as keywords by the lexer. This is a list of keywords that could also be a label name.
                 // See https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/generated_parser.y#L678 for more info.
                 .Or(Token.Matching<PromToken>(t => KeywordAndAlphanumericOperatorTokens.Contains(t), "keyword_or_operator"))
             .Or(Token.EqualTo(PromToken.OFFSET))
-            select id.ToStringValue();
+            select new ParsedValue<string>(id.ToStringValue(), id.Span);
         
         public static TokenListParser<PromToken, LabelMatcher> LabelMatcher =
             from id in LabelValueMatcher
             from op in MatchOp
             from str in StringLiteral
-            select new LabelMatcher(id, op, (StringLiteral)str);
+            select new LabelMatcher(id.Value, op, (StringLiteral)str, id.Span.UntilEnd(str.Span));
         
         public static TokenListParser<PromToken, Operators.LabelMatch> MatchOp =
             Token.EqualTo(PromToken.EQL).Select(_ => Operators.LabelMatch.Equal)
@@ -109,7 +111,7 @@ namespace PromQL.Parser
         public static TokenListParser<PromToken, NumberLiteral> Number =
             from s in (
                 Token.EqualTo(PromToken.ADD).Or(Token.EqualTo(PromToken.SUB))
-            ).OptionalOrDefault(new Token<PromToken>(PromToken.ADD, TextSpan.Empty))
+            ).OptionalOrDefault(new Token<PromToken>(PromToken.ADD, TextSpan.None))
             from n in Token.EqualTo(PromToken.NUMBER)
             select new NumberLiteral(
                 (n.ToStringValue(), s.Kind) switch
@@ -117,7 +119,8 @@ namespace PromQL.Parser
                     (var v, PromToken.ADD) when v.Equals("Inf", StringComparison.OrdinalIgnoreCase) => double.PositiveInfinity,
                     (var v, PromToken.SUB) when v.Equals("Inf", StringComparison.OrdinalIgnoreCase) => double.NegativeInfinity,
                     (var v, var op) => double.Parse(v) * (op == PromToken.SUB ? -1.0 : 1.0)
-                }
+                },
+                s.Span.Length > 0 ? s.Span.UntilEnd(n.Span) : n.Span
             );
 
         /// <summary>
@@ -153,7 +156,7 @@ namespace PromQL.Parser
                     ts += ParseComponent(match, 12, i => TimeSpan.FromSeconds(i));
                     ts += ParseComponent(match, 14, i => TimeSpan.FromMilliseconds(i));
 
-                    return new Duration(ts);
+                    return new Duration(ts, n.Span);
                 });
 
         // TODO support unicode, octal and hex escapes
@@ -197,11 +200,11 @@ namespace PromQL.Parser
                 {
                     var c = t.Span.ConsumeChar();
                     if (c.Value == '\'')
-                        return new StringLiteral('\'', SingleQuoteStringLiteral.Parse(t.Span.ToStringValue()));
+                        return new StringLiteral('\'', SingleQuoteStringLiteral.Parse(t.Span.ToStringValue()), t.Span);
                     if (c.Value == '"')
-                        return new StringLiteral('"', DoubleQuoteStringLiteral.Parse(t.Span.ToStringValue()));
+                        return new StringLiteral('"', DoubleQuoteStringLiteral.Parse(t.Span.ToStringValue()), t.Span);
                     if (c.Value == '`')
-                        return new StringLiteral('`', RawString.Parse(t.Span.ToStringValue()));
+                        return new StringLiteral('`', RawString.Parse(t.Span.ToStringValue()), t.Span);
                     
                     throw new ParseException($"Unexpected string quote", t.Span.Position);
                 });
@@ -211,29 +214,39 @@ namespace PromQL.Parser
             from offset in Token.EqualTo(PromToken.OFFSET)
             from neg in Token.EqualTo(PromToken.SUB).Optional()
             from duration in Duration
-            select new OffsetExpr(expr, new Duration(new TimeSpan(duration.Value.Ticks * (neg.HasValue ? -1 : 1))));
+            select new OffsetExpr(
+                expr, 
+                new Duration(new TimeSpan(duration.Value.Ticks * (neg.HasValue ? -1 : 1))), 
+                expr.Span!.Value.UntilEnd(duration.Span)
+            );
 
         public static TokenListParser<PromToken, ParenExpression> ParenExpression =
-            from e in Parse.Ref(() => Expr).Between(Token.EqualTo(PromToken.LEFT_PAREN), Token.EqualTo(PromToken.RIGHT_PAREN))
-            select new ParenExpression(e);
+            from lp in Token.EqualTo(PromToken.LEFT_PAREN)
+            from e in Parse.Ref(() => Expr)
+            from rp in Token.EqualTo(PromToken.RIGHT_PAREN)
+            select new ParenExpression(e, lp.Span.UntilEnd(rp.Span));
 
-        public static TokenListParser<PromToken, Expr[]> FunctionArgs = Parse.Ref(() => Expr).ManyDelimitedBy(Token.EqualTo(PromToken.COMMA))
-            .Between(Token.EqualTo(PromToken.LEFT_PAREN).Try(), Token.EqualTo(PromToken.RIGHT_PAREN));
+        public static TokenListParser<PromToken, ParsedValue<Expr[]>> FunctionArgs =
+            from lp in Token.EqualTo(PromToken.LEFT_PAREN).Try()
+            from args in Parse.Ref(() => Expr).ManyDelimitedBy(Token.EqualTo(PromToken.COMMA))
+            from rp in Token.EqualTo(PromToken.RIGHT_PAREN)
+            select args.ToParsedValue(lp.Span, rp.Span);
         
         public static TokenListParser<PromToken, FunctionCall> FunctionCall =
             from id in Token.EqualTo(PromToken.IDENTIFIER).Where(x => Functions.Map.ContainsKey(x.ToStringValue())).Try()
             from args in FunctionArgs
-            select new FunctionCall(Functions.Map[id.ToStringValue()], args.ToImmutableArray());
+            select new FunctionCall(Functions.Map[id.ToStringValue()], args.Value.ToImmutableArray(), id.Span.UntilEnd(args.Span));
 
 
-        public static TokenListParser<PromToken, ImmutableArray<string>> GroupingLabels =
+        public static TokenListParser<PromToken, ParsedValue<ImmutableArray<string>>> GroupingLabels =
+            from lParen in Token.EqualTo(PromToken.LEFT_PAREN)
             from labels in (LabelValueMatcher.ManyDelimitedBy(Token.EqualTo(PromToken.COMMA)))
-                .Between(Token.EqualTo(PromToken.LEFT_PAREN), Token.EqualTo(PromToken.RIGHT_PAREN))
-            select labels.Select(x => x).ToImmutableArray();
+            from rParen in Token.EqualTo(PromToken.RIGHT_PAREN)
+            select labels.Select(x => x.Value).ToImmutableArray().ToParsedValue(lParen.Span, rParen.Span);
 
-        public static TokenListParser<PromToken, bool> BoolModifier =
+        public static TokenListParser<PromToken, ParsedValue<bool>> BoolModifier =
             from b in Token.EqualTo(PromToken.BOOL).Optional()
-            select b.HasValue;
+            select b.HasValue.ToParsedValue(b?.Span ?? TextSpan.None);
         
         public static TokenListParser<PromToken, VectorMatching> OnOrIgnoring =
             from b in BoolModifier
@@ -241,10 +254,11 @@ namespace PromQL.Parser
             from onOrIgnoringLabels in GroupingLabels
             select new VectorMatching(
                 Operators.VectorMatchCardinality.OneToOne,
-                onOrIgnoringLabels,
+                onOrIgnoringLabels.Value,
                 onOrIgnoring.HasValue && onOrIgnoring.Kind == PromToken.ON,
                 ImmutableArray<string>.Empty,
-                b
+                b.Value,
+                b.HasSpan ? b.Span.UntilEnd(onOrIgnoringLabels.Span) : onOrIgnoring.Span.UntilEnd(onOrIgnoringLabels.Span)
             );
 
         public static Func<Expr, TokenListParser<PromToken, SubqueryExpr>> SubqueryExpr = (Expr expr) =>
@@ -253,13 +267,13 @@ namespace PromQL.Parser
             from colon in Token.EqualTo(PromToken.COLON)
             from step in Duration.AsNullable().OptionalOrDefault()
             from rb in Token.EqualTo(PromToken.RIGHT_BRACKET)
-            select new SubqueryExpr(expr, range, step);
+            select new SubqueryExpr(expr, range, step, expr.Span!.Value.UntilEnd(rb.Span));
 
         public static TokenListParser<PromToken, VectorMatching> VectorMatching =
             from vectMatching in (
                 from vm in OnOrIgnoring
                 from grp in Token.EqualTo(PromToken.GROUP_LEFT).Or(Token.EqualTo(PromToken.GROUP_RIGHT))
-                from grpLabels in GroupingLabels.OptionalOrDefault(ImmutableArray<string>.Empty)
+                from grpLabels in GroupingLabels.OptionalOrDefault(ImmutableArray<string>.Empty.ToEmptyParsedValue())
                 select vm with
                 {
                     MatchCardinality = grp switch
@@ -269,14 +283,15 @@ namespace PromQL.Parser
                         {Kind: PromToken.GROUP_RIGHT} => Operators.VectorMatchCardinality.OneToMany,
                         _ => Operators.VectorMatchCardinality.OneToOne
                     },
-                    Include = grpLabels
+                    Include = grpLabels.Value,
+                    Span = vm.Span!.Value.UntilEnd(grpLabels.HasSpan ? grpLabels.Span : grp.Span)
                 }
             ).Try().Or(
                 from vm in OnOrIgnoring
                 select vm
             ).Try().Or(
                 from b in BoolModifier
-                select new VectorMatching(b)
+                select new VectorMatching(b.Value) { Span = b.Span }
             )
             select vectMatching;
 
@@ -305,28 +320,37 @@ namespace PromQL.Parser
             from op in Token.Matching<PromToken>(x => BinaryOperatorMap.ContainsKey(x), "binary_op")
             from vm in VectorMatching.AsNullable().OptionalOrDefault()
             from rhs in Parse.Ref(() => Expr)
-            select new BinaryExpr(lhs, rhs, BinaryOperatorMap[op.Kind], vm);
+            select new BinaryExpr(lhs, rhs, BinaryOperatorMap[op.Kind], vm, lhs.Span!.Value.UntilEnd(rhs.Span));
 
-        public static TokenListParser<PromToken, (bool without, ImmutableArray<string> labels)> AggregateModifier =
+        public static TokenListParser<PromToken, ParsedValue<(bool without, ImmutableArray<string> labels)>> AggregateModifier =
             from kind in Token.EqualTo(PromToken.BY).Try()
                 .Or(Token.EqualTo(PromToken.WITHOUT).Try())
             from labels in GroupingLabels
-            select (kind.Kind == PromToken.WITHOUT, labels);
+            select (kind.Kind == PromToken.WITHOUT, labels.Value).ToParsedValue(kind.Span, labels.Span);
 
         public static TokenListParser<PromToken, AggregateExpr> AggregateExpr =
             from op in Token.EqualTo(PromToken.AGGREGATE_OP).Where(x => Operators.Aggregates.Contains(x.Span.ToStringValue())).Try()
             from argsAndMod in (
                 from args in FunctionArgs
-                from mod in AggregateModifier.OptionalOrDefault((without: false, labels: ImmutableArray<string>.Empty))
-                select (mod, args)
+                from mod in AggregateModifier.OptionalOrDefault(
+                    (without: false, labels: ImmutableArray<string>.Empty).ToEmptyParsedValue()
+                )
+                select (mod, args: args.Value).ToParsedValue(args.Span, mod.HasSpan ? mod.Span : args.Span)
             ).Or(
                 from mod in AggregateModifier
                 from args in FunctionArgs
-                select (mod, args)
+                select (mod, args: args.Value).ToParsedValue(mod.Span, args.Span)
             )
-            .Where(x => x.args.Length >= 1, "At least one argument is required for aggregate expressions")
-            .Where(x => x.args.Length <= 2, "A maximum of two arguments is supported for aggregate expressions")
-            select new AggregateExpr(op.ToStringValue(), argsAndMod.args.Length > 1 ? argsAndMod.args[1] : argsAndMod.args[0], argsAndMod.args.Length > 1 ? argsAndMod.args[0] : null, argsAndMod.mod.labels, argsAndMod.mod.without );
+            .Where(x => x.Value.args.Length >= 1, "At least one argument is required for aggregate expressions")
+            .Where(x => x.Value.args.Length <= 2, "A maximum of two arguments is supported for aggregate expressions")
+            select new AggregateExpr(
+                op.ToStringValue(), 
+                argsAndMod.Value.args.Length > 1 ? argsAndMod.Value.args[1] : argsAndMod.Value.args[0], 
+                argsAndMod.Value.args.Length > 1 ? argsAndMod.Value.args[0] : null, 
+                argsAndMod.Value.mod.Value.labels, 
+                argsAndMod.Value.mod.Value.without,
+                Span: op.Span.UntilEnd(argsAndMod.Span)
+            );
 
         public static TokenListParser<PromToken, Expr> ExprNotBinary =
              from head in OneOf(
@@ -385,5 +409,47 @@ namespace PromQL.Parser
 
             return expr;
         }
+    }
+    
+    public struct ParsedValue<T>
+    {
+        public ParsedValue(T value, TextSpan span)
+        {
+            Value = value;
+            Span = span;
+        }
+            
+        public T Value { get; }
+        public bool HasSpan => Span != TextSpan.None;
+        public TextSpan Span { get; }
+    }
+
+    public static class Extensions
+    {
+        public static ParsedValue<T> ToParsedValue<T>(this T result, TextSpan start, TextSpan end)
+        {
+            return new ParsedValue<T>(result, start.UntilEnd(end));
+        }
+        
+        public static ParsedValue<T> ToEmptyParsedValue<T>(this T result)
+        {
+            return new ParsedValue<T>(result, TextSpan.None);
+        }
+        
+        public static TextSpan UntilEnd(this TextSpan @base, TextSpan? next)
+        {
+            if (next == null)
+                return @base;
+            
+            int absolute1 = next.Value.Position.Absolute + next.Value.Length;
+            int absolute2 = @base.Position.Absolute;
+            return @base.First(absolute1 - absolute2);
+        }
+
+        public static ParsedValue<T> ToParsedValue<T>(this T result, TextSpan span)
+        {
+            return new ParsedValue<T>(result, span);
+        }
+
     }
 }

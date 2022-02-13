@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Immutable;
-using System.Text;
 using ExhaustiveMatching;
 using Superpower.Model;
 
@@ -12,7 +11,7 @@ namespace PromQL.Parser.Ast
     public interface IPromQlNode
     {
         void Accept(IVisitor visitor);
-        Position? Position { get; }
+        TextSpan? Span { get; }
     }
 
     /// <summary>
@@ -45,7 +44,7 @@ namespace PromQL.Parser.Ast
     /// <param name="GroupingLabels">The labels by which to group the Vector.</param>
     /// <param name="Without"> Whether to drop the given labels rather than keep them.</param>
     public record AggregateExpr(string OperatorName, Expr Expr, Expr? Param,
-        ImmutableArray<string> GroupingLabels, bool Without, Position? Position = null) : Expr
+        ImmutableArray<string> GroupingLabels, bool Without, TextSpan? Span = null) : Expr
     {
         public AggregateExpr(string operatorName, Expr expr)
             : this (operatorName, expr, null, ImmutableArray<string>.Empty, false)
@@ -76,7 +75,7 @@ namespace PromQL.Parser.Ast
     /// <param name="Operator">The operation of the expression</param>
     /// <param name="VectorMatching">The matching behavior for the operation to be applied if both operands are Vectors.</param>
     public record BinaryExpr(Expr LeftHandSide, Expr RightHandSide, Operators.Binary Operator,
-        VectorMatching? VectorMatching = null, Position? Position = null) : Expr
+        VectorMatching? VectorMatching = null, TextSpan? Span = null) : Expr
     {
         public Expr LeftHandSide { get; set; } = LeftHandSide;
         public Expr RightHandSide { get; set; } = RightHandSide;
@@ -105,7 +104,7 @@ namespace PromQL.Parser.Ast
     /// <param name="Include">Contains additional labels that should be included in the result from the side with the lower cardinality.</param>
     /// <param name="ReturnBool">If a comparison operator, return 0/1 rather than filtering.</param>
     public record VectorMatching(Operators.VectorMatchCardinality MatchCardinality, ImmutableArray<string> MatchingLabels,
-        bool On, ImmutableArray<string> Include, bool ReturnBool, Position? Position = null) : IPromQlNode
+        bool On, ImmutableArray<string> Include, bool ReturnBool, TextSpan? Span = null) : IPromQlNode
     {
         public static Operators.VectorMatchCardinality DefaultMatchCardinality { get; } = Operators.VectorMatchCardinality.OneToOne;
 
@@ -131,7 +130,7 @@ namespace PromQL.Parser.Ast
     /// </summary>
     /// <param name="Function">The function that was called.</param>
     /// <param name="Args">Arguments used in the call.</param>
-    public record FunctionCall(Function Function, ImmutableArray<Expr> Args, Position? Position = null) : Expr
+    public record FunctionCall(Function Function, ImmutableArray<Expr> Args, TextSpan? Span = null) : Expr
     {
         public FunctionCall(Function function, params Expr[] args) 
             : this (function, args.ToImmutableArray())
@@ -146,14 +145,14 @@ namespace PromQL.Parser.Ast
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record ParenExpression(Expr Expr, Position? Position = null) : Expr
+    public record ParenExpression(Expr Expr, TextSpan? Span = null) : Expr
     {
         public Expr Expr { get; set; } = Expr;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
         public ValueType Type => Expr.Type;
     }
 
-    public record OffsetExpr(Expr Expr, Duration Duration, Position? Position = null) : Expr
+    public record OffsetExpr(Expr Expr, Duration Duration, TextSpan? Span = null) : Expr
     {
         public Expr Expr { get; set; } = Expr;
         public Duration Duration { get; set; } = Duration;
@@ -161,7 +160,7 @@ namespace PromQL.Parser.Ast
         public ValueType Type => Expr.Type;
     }
 
-    public record MatrixSelector(VectorSelector Vector, Duration Duration, Position? Position = null) : Expr
+    public record MatrixSelector(VectorSelector Vector, Duration Duration, TextSpan? Span = null) : Expr
     {
         public VectorSelector Vector { get; set; } =Vector;
         public Duration Duration { get; set; } = Duration;
@@ -169,7 +168,7 @@ namespace PromQL.Parser.Ast
         public ValueType Type => ValueType.Matrix;
     }
 
-    public record UnaryExpr(Operators.Unary Operator, Expr Expr, Position? Position = null) : Expr
+    public record UnaryExpr(Operators.Unary Operator, Expr Expr, TextSpan? Span = null) : Expr
     {
         public Operators.Unary Operator { get; set; } = Operator;
         public Expr Expr { get; set; } = Expr;
@@ -180,37 +179,37 @@ namespace PromQL.Parser.Ast
     
     public record VectorSelector : Expr
     {
-        public VectorSelector(MetricIdentifier metricIdentifier, Position? position = null)
+        public VectorSelector(MetricIdentifier metricIdentifier, TextSpan? span = null)
         {
             MetricIdentifier = metricIdentifier;
-            Position = position;
+            Span = span;
         }
 
-        public VectorSelector(LabelMatchers labelMatchers, Position? position = null)
+        public VectorSelector(LabelMatchers labelMatchers, TextSpan? span = null)
         {
             LabelMatchers = labelMatchers;
-            Position = position;
+            Span = span;
         }
         
-        public VectorSelector(MetricIdentifier metricIdentifier, LabelMatchers labelMatchers, Position? position = null)
+        public VectorSelector(MetricIdentifier metricIdentifier, LabelMatchers labelMatchers, TextSpan? span = null)
         {
             
             MetricIdentifier = metricIdentifier;
             LabelMatchers = labelMatchers;
-            Position = position;
+            Span = span;
         }
         
         public MetricIdentifier? MetricIdentifier { get; set; }
         public LabelMatchers? LabelMatchers { get; set; }
-        public Position? Position { get; }
+        public TextSpan? Span { get; }
         public ValueType Type => ValueType.Vector;
         
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record LabelMatchers(ImmutableArray<LabelMatcher> Matchers, Position? Position = null) : IPromQlNode
+    public record LabelMatchers(ImmutableArray<LabelMatcher> Matchers, TextSpan? Span = null) : IPromQlNode
     {
-        protected virtual bool PrintMembers(StringBuilder builder)
+        protected virtual bool PrintMembers(System.Text.StringBuilder builder)
         {
             builder.Append($"{nameof(Matchers)} = ");
             Matchers.PrintArray(builder);
@@ -223,34 +222,34 @@ namespace PromQL.Parser.Ast
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record LabelMatcher(string LabelName, Operators.LabelMatch Operator, StringLiteral Value, Position? Position = null) : IPromQlNode
+    public record LabelMatcher(string LabelName, Operators.LabelMatch Operator, StringLiteral Value, TextSpan? Span = null) : IPromQlNode
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record MetricIdentifier(string Value, Position? Position = null) : IPromQlNode
+    public record MetricIdentifier(string Value, TextSpan? Span = null) : IPromQlNode
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record NumberLiteral(double Value, Position? Position = null) : Expr
+    public record NumberLiteral(double Value, TextSpan? Span = null) : Expr
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
         public ValueType Type => ValueType.Scalar;
     }
 
-    public record Duration(TimeSpan Value, Position? Position = null) : IPromQlNode 
+    public record Duration(TimeSpan Value, TextSpan? Span = null) : IPromQlNode 
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     }
 
-    public record StringLiteral(char Quote, string Value, Position? Position = null) : Expr
+    public record StringLiteral(char Quote, string Value, TextSpan? Span = null) : Expr
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
         public ValueType Type => ValueType.String;
     }
 
-    public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step = null, Position? Position = null) : Expr
+    public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step = null, TextSpan? Span = null) : Expr
     {
         public Expr Expr { get; set; } = Expr;
         public Duration Range { get; set; } = Range;
@@ -262,7 +261,7 @@ namespace PromQL.Parser.Ast
     
     internal static class Extensions
     {
-        internal static void PrintArray<T>(this ImmutableArray<T> arr, StringBuilder sb)
+        internal static void PrintArray<T>(this ImmutableArray<T> arr, System.Text.StringBuilder sb)
             where T : notnull
         {
             sb.Append("[ ");
