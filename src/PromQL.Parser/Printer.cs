@@ -201,7 +201,7 @@ namespace PromQL.Parser
 
         public virtual void Visit(AggregateExpr expr)
         {
-            _sb.Append($"{expr.OperatorName}");
+            _sb.Append($"{expr.Operator.Name}");
 
             if (expr.GroupingLabels.Length > 0)
             {

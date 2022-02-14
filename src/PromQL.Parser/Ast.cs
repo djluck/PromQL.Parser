@@ -38,25 +38,25 @@ namespace PromQL.Parser.Ast
     /// <summary>
     /// Represents an aggregation operation on a Vector.
     /// </summary>
-    /// <param name="OperatorName">The used aggregation operation.</param>
+    /// <param name="Operator">The used aggregation operation.</param>
     /// <param name="Expr">The Vector expression over which is aggregated.</param>
     /// <param name="Param">Parameter used by some aggregators.</param>
     /// <param name="GroupingLabels">The labels by which to group the Vector.</param>
     /// <param name="Without"> Whether to drop the given labels rather than keep them.</param>
-    public record AggregateExpr(string OperatorName, Expr Expr, Expr? Param,
+    public record AggregateExpr(AggregateOperator Operator, Expr Expr, Expr? Param,
         ImmutableArray<string> GroupingLabels, bool Without, TextSpan? Span = null) : Expr
     {
-        public AggregateExpr(string operatorName, Expr expr)
-            : this (operatorName, expr, null, ImmutableArray<string>.Empty, false)
+        public AggregateExpr(AggregateOperator @operator, Expr expr)
+            : this (@operator, expr, null, ImmutableArray<string>.Empty, false)
         {
         }
 
-        public AggregateExpr(string operatorName, Expr expr, Expr param, bool without = false, params string[] groupingLabels)
-            : this (operatorName, expr, param, groupingLabels.ToImmutableArray(), without)
+        public AggregateExpr(AggregateOperator @operator, Expr expr, Expr param, bool without = false, params string[] groupingLabels)
+            : this (@operator, expr, param, groupingLabels.ToImmutableArray(), without)
         {
         }
         
-        public string OperatorName { get; set;} = OperatorName;
+        public AggregateOperator Operator { get; set;} = Operator;
         public Expr Expr { get; set;} = Expr;
         public Expr? Param { get; set;} = Param;
         public ImmutableArray<string> GroupingLabels { get; set;} = GroupingLabels;

@@ -46,7 +46,7 @@ namespace PromQL.Parser
         public static TokenListParser<PromToken, MetricIdentifier> MetricIdentifier =
             from id in Token.EqualTo(PromToken.METRIC_IDENTIFIER)
                 .Or(Token.EqualTo(PromToken.IDENTIFIER))
-                .Or(Token.EqualTo(PromToken.AGGREGATE_OP).Where(t => Operators.Aggregates.Contains(t.ToStringValue()), "aggregate_op"))
+                .Or(Token.EqualTo(PromToken.AGGREGATE_OP).Where(t => Operators.Aggregates.ContainsKey(t.ToStringValue()), "aggregate_op"))
                 .Or(Token.Matching<PromToken>(t => AlphanumericOperatorTokens.Contains(t), "operator"))
             select new MetricIdentifier(id.ToStringValue(), id.Span);
 
@@ -85,7 +85,7 @@ namespace PromQL.Parser
         // TODO see https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/generated_parser.y#L679
         public static TokenListParser<PromToken, ParsedValue<string>> LabelValueMatcher =
             from id in Token.EqualTo(PromToken.IDENTIFIER)
-                .Or(Token.EqualTo(PromToken.AGGREGATE_OP).Where(x => Operators.Aggregates.Contains(x.ToStringValue())))
+                .Or(Token.EqualTo(PromToken.AGGREGATE_OP).Where(x => Operators.Aggregates.ContainsKey(x.ToStringValue())))
                 // Inside of grouping options label names can be recognized as keywords by the lexer. This is a list of keywords that could also be a label name.
                 // See https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/generated_parser.y#L678 for more info.
                 .Or(Token.Matching<PromToken>(t => KeywordAndAlphanumericOperatorTokens.Contains(t), "keyword_or_operator"))
@@ -209,16 +209,30 @@ namespace PromQL.Parser
                     throw new ParseException($"Unexpected string quote", t.Span.Position);
                 });
 
+        private static readonly HashSet<Type> ValidOffsetExpressions = new HashSet<Type>
+        {
+            typeof(MatrixSelector),
+            typeof(VectorSelector),
+            typeof(SubqueryExpr),
+        };
 
         public static Func<Expr, TokenListParser<PromToken, OffsetExpr>> OffsetExpr = (Expr expr) =>
+        (
             from offset in Token.EqualTo(PromToken.OFFSET)
             from neg in Token.EqualTo(PromToken.SUB).Optional()
             from duration in Duration
+                // Where needs to be called once the parser has definitely been advanced beyond the initial token (offset)
+                // it parses in order for Or() to consider this a partial failure
+                .Where(_ => 
+                        ValidOffsetExpressions.Contains(expr.GetType()), 
+                    "offset modifier must be preceded by an instant vector selector or range vector selector or a subquery"
+                )
             select new OffsetExpr(
-                expr, 
-                new Duration(new TimeSpan(duration.Value.Ticks * (neg.HasValue ? -1 : 1))), 
+                expr,
+                new Duration(new TimeSpan(duration.Value.Ticks * (neg.HasValue ? -1 : 1))),
                 expr.Span!.Value.UntilEnd(duration.Span)
-            );
+            )
+        );
 
         public static TokenListParser<PromToken, ParenExpression> ParenExpression =
             from lp in Token.EqualTo(PromToken.LEFT_PAREN)
@@ -234,8 +248,12 @@ namespace PromQL.Parser
         
         public static TokenListParser<PromToken, FunctionCall> FunctionCall =
             from id in Token.EqualTo(PromToken.IDENTIFIER).Where(x => Functions.Map.ContainsKey(x.ToStringValue())).Try()
+            let function = Functions.Map[id.ToStringValue()] 
             from args in FunctionArgs
-            select new FunctionCall(Functions.Map[id.ToStringValue()], args.Value.ToImmutableArray(), id.Span.UntilEnd(args.Span));
+                .Where(a => function.IsVariadic || (!function.IsVariadic && function.ArgTypes.Length == a.Value.Length), $"Incorrect number of argument(s) in call to {function.Name}, expected {function.ArgTypes.Length} argument(s).")
+                .Where(a => !function.IsVariadic || (function.IsVariadic && a.Value.Length >= function.MinArgCount), $"Incorrect number of argument(s) in call to {function.Name}, expected at least {function.MinArgCount} argument(s).")
+                // TODO validate "at most" arguments- https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/parse.go#L552
+            select new FunctionCall(function, args.Value.ToImmutableArray(), id.Span.UntilEnd(args.Span));
 
 
         public static TokenListParser<PromToken, ParsedValue<ImmutableArray<string>>> GroupingLabels =
@@ -329,7 +347,9 @@ namespace PromQL.Parser
             select (kind.Kind == PromToken.WITHOUT, labels.Value).ToParsedValue(kind.Span, labels.Span);
 
         public static TokenListParser<PromToken, AggregateExpr> AggregateExpr =
-            from op in Token.EqualTo(PromToken.AGGREGATE_OP).Where(x => Operators.Aggregates.Contains(x.Span.ToStringValue())).Try()
+            from op in Token.EqualTo(PromToken.AGGREGATE_OP)
+                .Where(x => Operators.Aggregates.ContainsKey(x.ToStringValue())).Try()
+            let aggOps = Operators.Aggregates[op.ToStringValue()]
             from argsAndMod in (
                 from args in FunctionArgs
                 from mod in AggregateModifier.OptionalOrDefault(
@@ -341,10 +361,10 @@ namespace PromQL.Parser
                 from args in FunctionArgs
                 select (mod, args: args.Value).ToParsedValue(mod.Span, args.Span)
             )
-            .Where(x => x.Value.args.Length >= 1, "At least one argument is required for aggregate expressions")
-            .Where(x => x.Value.args.Length <= 2, "A maximum of two arguments is supported for aggregate expressions")
+            .Where(x => aggOps.ParameterType == null || (aggOps.ParameterType != null && x.Value.args.Length == 2), "wrong number of arguments for aggregate expression provided, expected 2, got 1")
+            .Where(x => aggOps.ParameterType != null || (aggOps.ParameterType == null && x.Value.args.Length == 1), "wrong number of arguments for aggregate expression provided, expected 1, got 2")
             select new AggregateExpr(
-                op.ToStringValue(), 
+                aggOps, 
                 argsAndMod.Value.args.Length > 1 ? argsAndMod.Value.args[1] : argsAndMod.Value.args[0], 
                 argsAndMod.Value.args.Length > 1 ? argsAndMod.Value.args[0] : null, 
                 argsAndMod.Value.mod.Value.labels, 
@@ -365,23 +385,26 @@ namespace PromQL.Parser
                  Parse.Ref(() => StringLiteral).Cast<PromToken, StringLiteral, Expr>()
              )
 #pragma warning disable CS8602
-             from offsetOrSubquery in Parse.Ref(() => OffsetOrSubquery(head)).AsNullable().OptionalOrDefault()
+             from offsetOrSubquery in Parse.Ref(() => OffsetOrSubquery(head))
 #pragma warning restore CS8602
              select offsetOrSubquery == null ? head : offsetOrSubquery;
 
-        public static Func<Expr, TokenListParser<PromToken, Expr>> OffsetOrSubquery = (Expr expr) =>
-             from offsetOfSubquery in (
-                 from offset in OffsetExpr(expr)
-                 select (Expr)offset
-             ).Or(
-                 from subquery in SubqueryExpr(expr)
-                 select (Expr)subquery
-             )
-             select offsetOfSubquery;
+        public static Func<Expr, TokenListParser<PromToken, Expr?>> OffsetOrSubquery = (Expr expr) =>
+            (
+                from offset in OffsetExpr(expr)
+                select (Expr) offset
+            ).Or(
+                from subquery in SubqueryExpr(expr)
+                select (Expr) subquery
+            )
+            .AsNullable()
+            .Or(
+                Parse.Return<PromToken, Expr?>(null)
+            );
         
         public static TokenListParser<PromToken, Expr> Expr { get; } =
              from head in Parse.Ref(() => BinaryExpr).Cast<PromToken, BinaryExpr, Expr>().Try().Or(ExprNotBinary)
-             from offsetOrSubquery in OffsetOrSubquery(head).AsNullable().OptionalOrDefault()
+             from offsetOrSubquery in OffsetOrSubquery(head)
              select offsetOrSubquery == null ? head : offsetOrSubquery;
 
         /// <summary>

@@ -16,26 +16,7 @@ namespace PromQL.Parser
             Regexp,
             NotRegexp
         }
-        
-        /// <summary>
-        /// Defines the set of all valid aggregator operators (e.g. sum, avg, etc.)
-        /// </summary>
-        public static ImmutableHashSet<string> Aggregates = new []
-        {
-            "sum",
-            "avg",
-            "count",
-            "min",
-            "max",
-            "group",
-            "stddev",
-            "stdvar",
-            "topk",
-            "bottomk",
-            "count_values",
-            "quantile",
-        }.ToImmutableHashSet(StringComparer.OrdinalIgnoreCase);
-        
+
         /// <summary>
         /// Describes the cardinality relationship of two Vectors in a binary operation.
         /// </summary>
@@ -54,7 +35,7 @@ namespace PromQL.Parser
             /// </summary>
             OneToMany
         }
-        
+
         public enum Binary
         {
             Pow,
@@ -86,7 +67,26 @@ namespace PromQL.Parser
             /// </summary>
             Sub
         }
-        
+
+        /// <summary>
+        /// Defines the set of all valid aggregator operators (e.g. sum, avg, etc.)
+        /// </summary>
+        public static ImmutableDictionary<string, AggregateOperator> Aggregates = new []
+        {
+            new AggregateOperator("sum"),
+            new AggregateOperator("avg"),
+            new AggregateOperator("count"),
+            new AggregateOperator("min"),
+            new AggregateOperator("max"),
+            new AggregateOperator("group"),
+            new AggregateOperator("stddev"),
+            new AggregateOperator("stdvar"),
+            new AggregateOperator("topk", ValueType.Scalar),
+            new AggregateOperator("bottomk", ValueType.Scalar),
+            new AggregateOperator("count_values", ValueType.String),
+            new AggregateOperator("quantile", ValueType.Scalar)
+        }.ToImmutableDictionary(k => k.Name, v => v, StringComparer.OrdinalIgnoreCase);
+
         public static string ToPromQl(this Operators.Binary op) => op switch
         {
             Operators.Binary.Add => "+",
@@ -132,4 +132,6 @@ namespace PromQL.Parser
             _ => throw ExhaustiveMatch.Failed(op)
         };
     }
+
+    public record AggregateOperator(string Name, ValueType? ParameterType = null);
 }

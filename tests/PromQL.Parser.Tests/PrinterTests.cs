@@ -54,7 +54,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void Aggregate_ToPromQl()
         {
-            _printer.ToPromQl(new AggregateExpr("sum",
+            _printer.ToPromQl(new AggregateExpr(Operators.Aggregates["sum"],
                 new VectorSelector(new MetricIdentifier("test_expr")),
                 null, 
                 ImmutableArray<string>.Empty, 
@@ -65,7 +65,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void Aggregate_WithLabels_ToPromQl()
         {
-            _printer.ToPromQl(new AggregateExpr("sum",
+            _printer.ToPromQl(new AggregateExpr(Operators.Aggregates["sum"],
                 new VectorSelector(new MetricIdentifier("test_expr")),
                 null, 
                 new [] { "one" }.ToImmutableArray(),
@@ -76,7 +76,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void Aggregate_WithParam_ToPromQl()
         {
-            _printer.ToPromQl(new AggregateExpr("quantile",
+            _printer.ToPromQl(new AggregateExpr(Operators.Aggregates["quantile"],
                 new VectorSelector(new MetricIdentifier("test_expr")),
                 new NumberLiteral(1),
                 new[] {"label1", "label2"}.ToImmutableArray(),

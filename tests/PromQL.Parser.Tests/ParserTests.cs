@@ -274,6 +274,17 @@ namespace PromQL.Parser.Tests
         } 
         
         [Test]
+        [TestCase("time() offset 1m")]
+        [TestCase("avg(blah) offset 1m")]
+        [TestCase("'asdas' offset 1m")]
+        [TestCase("1 offset 1m")]
+        public void Offset_Invalid(string badQuery)
+        {
+            Assert.Throws<ParseException>(() => Parse(Parser.Expr, badQuery))
+                .Message.Should().Contain("offset modifier must be preceded by an instant vector selector or range vector selector or a subquery");
+        }
+
+        [Test]
         public void Subquery_Offset()
         {
             const string input = "metric offset 1w [ 1h:1m ]";
@@ -349,9 +360,33 @@ namespace PromQL.Parser.Tests
         }
         
         [Test]
-        public void FunctionCall_InvalidFunction()
+        public void FunctionCall_InvalidName()
         {
             Assert.Throws<ParseException>(() => Parse(Parser.Expr, "this_doesnt_exist ()"));  
+        }
+        
+        [Test]
+        public void FunctionCall_InvalidParameterCount()
+        {
+            Assert.Throws<ParseException>(() => Parse(Parser.Expr, "abs(-1, 1)"))
+                .Message.Contains("expected 1 argument(s)");  
+        }
+        
+        [Test]
+        public void FunctionCall_InvalidParameterCountVaradic()
+        {
+            Assert.Throws<ParseException>(() => Parse(Parser.Expr, "label_join(instant_vector, 'dst_label', 'separator')"))
+                .Message.Should().Contain("expected at least 4 argument(s)");  
+        }
+        
+        [Test]
+        [TestCase("hour()")]
+        [TestCase("hour(one)")]
+        [TestCase("hour(one, two)")]
+        [TestCase("label_join(instant_vector, 'dst_label', 'separator', 'one', 'two')")]
+        public void FunctionCall_Varadic(string query)
+        {
+            Parse(Parser.Expr, query).Should().BeOfType<FunctionCall>();
         }
 
         [Test]
@@ -363,16 +398,15 @@ namespace PromQL.Parser.Tests
             );
         
         [Test]
-        // NOTE: we do not either validate the parameter count or types of functions 
-        public void FunctionCall_MultiArg() => Parse(Parser.Expr, "abs (1, 2)")
+        // NOTE: we do not validate the types of functions in the parser 
+        public void FunctionCall_MultiArg() => Parse(Parser.Expr, "histogram_quantile (0.9, blah)")
             .Should().BeEquivalentTo(
-                new FunctionCall(Functions.Map["abs"], new Expr[] { new NumberLiteral(1.0), new NumberLiteral(2.0) }.ToImmutableArray()),
+                new FunctionCall(Functions.Map["histogram_quantile"], new Expr[] { new NumberLiteral(0.9), new VectorSelector(new MetricIdentifier("blah")) }.ToImmutableArray()),
                 // Don't assert over parsed Span positions, will be tedious to specify all positions
                 cfg => cfg.Excluding(x => x.Name == "Span")
             );
         
         [Test]
-        // NOTE: we do not either validate the parameter count or types of functions 
         public void FunctionCall_SnakeCase() => Parse(Parser.Expr, "absent_over_time (metric_name )")
             .Should().BeEquivalentTo(
                 new FunctionCall(Functions.Map["absent_over_time"], new Expr[] { new VectorSelector(new MetricIdentifier("metric_name")) }.ToImmutableArray()),
@@ -420,7 +454,7 @@ namespace PromQL.Parser.Tests
             Parse(Parser.Expr, "some_expr").Should().BeOfType<VectorSelector>();
             Parse(Parser.Expr, "some_expr[1d]").Should().BeOfType<MatrixSelector>();
             Parse(Parser.Expr, "+(1)").Should().BeOfType<UnaryExpr>();
-            Parse(Parser.Expr, "abs()").Should().BeOfType<FunctionCall>();
+            Parse(Parser.Expr, "abs(-1)").Should().BeOfType<FunctionCall>();
         }
         
         [Test]
@@ -468,7 +502,7 @@ namespace PromQL.Parser.Tests
             Parse(Parser.Expr, toParse).Should().BeEquivalentTo(
                 new BinaryExpr(
                     new AggregateExpr(
-                        "sum",
+                        Operators.Aggregates["sum"],
                         new FunctionCall(
                             Functions.Map["rate"], 
                             new Expr[]{
@@ -483,7 +517,7 @@ namespace PromQL.Parser.Tests
                         false
                     ),
                     new AggregateExpr(
-                        "sum",
+                        Operators.Aggregates["sum"],
                         new FunctionCall(
                             Functions.Map["rate"], 
                             new Expr[]{
@@ -758,19 +792,19 @@ namespace PromQL.Parser.Tests
 
         [Test]
         [TestCase("avg (blah)", "avg")]
-        [TestCase("bottomk (blah)", "bottomk")]
+        [TestCase("bottomk (2, blah)", "bottomk")]
         [TestCase("count (blah)", "count")]
-        [TestCase("count_values (blah)", "count_values")]
+        [TestCase("count_values (blah, values)", "count_values")]
         [TestCase("group (blah)", "group")]
         [TestCase("max (blah)", "max")]
         [TestCase("min (blah)", "min")]
-        [TestCase("quantile (blah)", "quantile")]
+        [TestCase("quantile (0.5, blah)", "quantile")]
         [TestCase("stddev (blah)", "stddev")]
         [TestCase("stdvar (blah)", "stdvar")]
         [TestCase("sum (blah)", "sum")]
-        [TestCase("topk (blah)", "topk")]
+        [TestCase("topk (1, blah)", "topk")]
         public void AggregateExpr_Operator(string input, string expected) => Parse(Parser.AggregateExpr, input)
-            .OperatorName.Should().Be(expected);
+            .Operator.Name.Should().Be(expected);
 
         [Test]
         public void AggregateExpr_NoMod()
@@ -780,7 +814,7 @@ namespace PromQL.Parser.Tests
             var result = Parse(Parser.AggregateExpr, input);
             result.Should().BeEquivalentTo(
                 new AggregateExpr(
-                        "sum",
+                        Operators.Aggregates["sum"],
                         new VectorSelector(new MetricIdentifier("blah")),
                         null,
                         ImmutableArray<string>.Empty,
@@ -801,7 +835,7 @@ namespace PromQL.Parser.Tests
             
             result.Should().BeEquivalentTo(
                 new AggregateExpr(
-                    "sum",
+                    Operators.Aggregates["sum"],
                     new VectorSelector(new MetricIdentifier("blah")),
                     null,
                     new string[] {"one", "two"}.ToImmutableArray(),
@@ -821,7 +855,7 @@ namespace PromQL.Parser.Tests
             var result = Parse(Parser.AggregateExpr, input);
             result.Should().BeEquivalentTo(
                 new AggregateExpr(
-                    "sum",
+                    Operators.Aggregates["sum"],
                     new VectorSelector(new MetricIdentifier("blah")),
                     null,
                     new string[] {"one"}.ToImmutableArray(),
@@ -836,7 +870,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void AggregateExpr_TwoArgs() => Parse(Parser.AggregateExpr, "quantile (0.5, blah)").Should().BeEquivalentTo(
             new AggregateExpr(
-                "quantile",
+                Operators.Aggregates["quantile"],
                 new VectorSelector(new MetricIdentifier("blah")),
                 new NumberLiteral(0.5),
                 ImmutableArray<string>.Empty, 
@@ -845,6 +879,16 @@ namespace PromQL.Parser.Tests
             // Don't assert over parsed Span positions, will be tedious to specify all positions
             cfg => cfg.Excluding(x => x.Name == "Span")
         );
+
+        [Test]
+        public void AggregateExpr_OneArgs_InvalidFunc() =>
+            Assert.Throws<ParseException>(() => Parse(Parser.AggregateExpr, "quantile (blah)"))
+                .Message.Should().Contain("wrong number of arguments for aggregate expression provided, expected 2, got 1");
+        
+        [Test]
+        public void AggregateExpr_TwoArgs_InvalidFunc() =>
+            Assert.Throws<ParseException>(() => Parse(Parser.AggregateExpr, "sum (0.5, blah)"))
+                .Message.Should().Contain("wrong number of arguments for aggregate expression provided, expected 1, got 2");
         
         [Test]
         public void AggregateExpr_LabelNameAggOp()

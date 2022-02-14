@@ -32,9 +32,9 @@ namespace PromQL.Parser
             new Function("cos", ValueType.Vector, ValueType.Vector),
             new Function("cosh", ValueType.Vector, ValueType.Vector),
             new Function("count_over_time", ValueType.Vector, ValueType.Matrix),
-            new Function("days_in_month", ValueType.Vector, ValueType.Vector),
-            new Function("day_of_month", ValueType.Vector, ValueType.Vector),
-            new Function("day_of_week", ValueType.Vector, ValueType.Vector),
+            new Function("days_in_month", ValueType.Vector, varadicModifier: 1 , ValueType.Vector),
+            new Function("day_of_month", ValueType.Vector, varadicModifier: 1, ValueType.Vector),
+            new Function("day_of_week", ValueType.Vector, varadicModifier: 1, ValueType.Vector),
             new Function("deg", ValueType.Vector, ValueType.Vector),
             new Function("delta", ValueType.Vector, ValueType.Matrix),
             new Function("deriv", ValueType.Vector, ValueType.Matrix),
@@ -42,20 +42,20 @@ namespace PromQL.Parser
             new Function("floor", ValueType.Vector, ValueType.Vector),
             new Function("histogram_quantile", ValueType.Vector, ValueType.Scalar, ValueType.Vector),
             new Function("holt_winters", ValueType.Vector, ValueType.Matrix, ValueType.Scalar, ValueType.Scalar),
-            new Function("hour", ValueType.Vector, ValueType.Vector),
+            new Function("hour", ValueType.Vector, varadicModifier: 1, ValueType.Vector),
             new Function("idelta", ValueType.Vector, ValueType.Matrix),
             new Function("increase", ValueType.Vector, ValueType.Matrix),
             new Function("irate", ValueType.Vector, ValueType.Matrix),
             new Function("label_replace", ValueType.Vector, ValueType.Vector, ValueType.String, ValueType.String, ValueType.String, ValueType.String),
-            new Function("label_join", ValueType.Vector, ValueType.Vector, ValueType.String, ValueType.String, ValueType.String),
+            new Function("label_join", ValueType.Vector, varadicModifier: 0, ValueType.Vector, ValueType.String, ValueType.String, ValueType.String),
             new Function("last_over_time", ValueType.Vector, ValueType.Matrix),
             new Function("ln", ValueType.Vector, ValueType.Vector),
             new Function("log_10", ValueType.Vector, ValueType.Vector),
             new Function("log_2", ValueType.Vector, ValueType.Vector),
             new Function("max_over_time", ValueType.Vector, ValueType.Matrix),
             new Function("min_over_time", ValueType.Vector, ValueType.Matrix),
-            new Function("minute", ValueType.Vector, ValueType.Vector),
-            new Function("month", ValueType.Vector, ValueType.Vector),
+            new Function("minute", ValueType.Vector, varadicModifier: 1, ValueType.Vector),
+            new Function("month", ValueType.Vector, varadicModifier: 1, ValueType.Vector),
             new Function("pi", ValueType.Scalar),
             new Function("predict_linear", ValueType.Scalar, ValueType.Matrix, ValueType.Scalar),
             new Function("present_over_time", ValueType.Vector, ValueType.Matrix),
@@ -63,7 +63,7 @@ namespace PromQL.Parser
             new Function("rad", ValueType.Vector, ValueType.Vector),
             new Function("rate", ValueType.Vector, ValueType.Matrix),
             new Function("resets", ValueType.Vector, ValueType.Matrix),
-            new Function("round", ValueType.Vector, ValueType.Vector, ValueType.Scalar),
+            new Function("round", ValueType.Vector, varadicModifier: 1, ValueType.Vector, ValueType.Scalar),
             new Function("scalar", ValueType.Scalar, ValueType.Vector),
             new Function("sgn", ValueType.Vector, ValueType.Vector),
             new Function("sin", ValueType.Vector, ValueType.Vector),
@@ -79,9 +79,19 @@ namespace PromQL.Parser
             new Function("timestamp", ValueType.Vector, ValueType.Vector),
             new Function("time", ValueType.Scalar),
             new Function("vector", ValueType.Vector, ValueType.Scalar),
-            new Function("year", ValueType.Vector, ValueType.Vector)
+            new Function("year", ValueType.Vector, varadicModifier: 1, ValueType.Vector)
         }.ToImmutableDictionary(k => k.Name);
     }
 
-    public record Function(string Name, ValueType ReturnType, params ValueType[] ArgTypes);
+    public record Function(string Name, ValueType ReturnType, ImmutableArray<ValueType> ArgTypes, int? VariadicModifier = null)
+    {
+        public Function(string name, ValueType returnType, params ValueType[] argTypes) 
+            : this(name, returnType, argTypes.ToImmutableArray(), null) { }   
+        
+        public Function(string name, ValueType returnType, int varadicModifier, params ValueType[] argTypes) 
+            : this(name, returnType, argTypes.ToImmutableArray(), varadicModifier) { }
+
+        public bool IsVariadic => VariadicModifier != null;
+        public int MinArgCount => ArgTypes.Length - (VariadicModifier ?? 0);
+    }
 }
