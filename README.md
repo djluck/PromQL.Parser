@@ -92,16 +92,16 @@ Superpower.ParseException: Syntax error (line 1, column 21): Unexpected left bra
 
 ### Type checking
 Syntax is not only validated but expressions can also be typed checked via `CheckType`, e.g:
-```
+```csharp
 Parser.ParseExpression("1 + sum_over_time(some_metric[1h])").CheckType().Dump();
 ```
 Returns:
-```
+```csharp
 ValueType.Vector
 ```
 
 Expressions that violate the PromQL type system will throw an exception, e.g:
-```
+```csharp
 Parser.ParseExpression("'a' + 'b'").CheckType();
 ```
 Throws:
