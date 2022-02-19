@@ -751,15 +751,49 @@ namespace PromQL.Parser.Tests
         }
         
         [Test]
-        public void BinaryExpr_Repetitive()
+        [TestCase("1 + 2 + 3")]
+        [TestCase("1 / 2 * 3")]
+        [TestCase("1 + 2 - 3")]
+        [TestCase("1 < 2 > 3")]
+        public void BinaryExpr_PrecedenceEqual(string input)
         {
-            var input = "1 + 2 + 3";
             var result = Parse(Parser.BinaryExpr, input) as BinaryExpr;
-            result.LeftHandSide.Should().Be(new NumberLiteral(1.0, new TextSpan(input, new Position(0, 0, 0), 1)));
+            result.RightHandSide.Should().Be(new NumberLiteral(3.0, new TextSpan(input, new Position(8, 0, 0), 1)));
+            var binExpr = result.LeftHandSide.Should().BeOfType<BinaryExpr>();
+            
+            binExpr.Which.LeftHandSide.Should().Be(new NumberLiteral(1.0, new TextSpan(input, new Position(0, 0, 0), 1)));
+            binExpr.Which.RightHandSide.Should().Be(new NumberLiteral(2.0, new TextSpan(input, new Position(4, 0, 0), 1)));
+        }
+
+        [Test]
+        [TestCase("1 * 2 + 3")]
+        [TestCase("1 - 2 > 3")]
+        [TestCase("1 < 2 and 3")]
+        [TestCase("1 and 2 or 3")]
+        public void BinaryExpr_PrecedenceHigher(string input)
+        {
+            var result = Parse(Parser.BinaryExpr, input);
+            
+            var binExpr = result.LeftHandSide.Should().BeOfType<BinaryExpr>();
+            binExpr.Which.LeftHandSide.Should().BeOfType<NumberLiteral>().Which.Value.Should().Be(1);
+            binExpr.Which.RightHandSide.Should().BeOfType<NumberLiteral>().Which.Value.Should().Be(2);
+            
+            result.RightHandSide.Should().BeOfType<NumberLiteral>().Which.Value.Should().Be(3);
+        }
+        
+        [Test]
+        [TestCase("1 - 2 / 3")]
+        [TestCase("1 <= 2 + 3")]
+        [TestCase("1 unless 2 >= 3")]
+        [TestCase("1 or 2 unless 3")]
+        public void BinaryExpr_PrecedenceLower(string input)
+        {
+            var result = Parse(Parser.BinaryExpr, input);
+            result.LeftHandSide.Should().BeOfType<NumberLiteral>().Which.Value.Should().Be(1);
             var binExpr = result.RightHandSide.Should().BeOfType<BinaryExpr>();
             
-            binExpr.Which.LeftHandSide.Should().Be(new NumberLiteral(2.0, new TextSpan(input, new Position(4, 0, 0), 1)));
-            binExpr.Which.RightHandSide.Should().Be(new NumberLiteral(3.0, new TextSpan(input, new Position(8, 0, 0), 1)));
+            binExpr.Which.LeftHandSide.Should().BeOfType<NumberLiteral>().Which.Value.Should().Be(2);
+            binExpr.Which.RightHandSide.Should().BeOfType<NumberLiteral>().Which.Value.Should().Be(3);
         }
         
         [Test]
@@ -771,23 +805,35 @@ namespace PromQL.Parser.Tests
                 .LeftHandSide.Should().BeOfType<ParenExpression>().Which
                 .Expr.Should().BeOfType<BinaryExpr>().Which
                 .LeftHandSide.Should().BeOfType<NumberLiteral>().Subject.Value.Should().Be(1);
-            
-            Parse(Parser.Expr, "(100 * (1) / 128)");
         }
         
         [Test]
         public void BinaryExpr_VectorMatching()
         {
-            Parse(Parser.BinaryExpr, "1 + bool 2")
+            Parse(Parser.BinaryExpr, "1 > bool 2")
                 .Should().BeEquivalentTo(new BinaryExpr(
                         new NumberLiteral(1.0),
                         new NumberLiteral(2),
-                        Operators.Binary.Add,
+                        Operators.Binary.Gtr,
                         new VectorMatching(true)
                     ),
                     // Don't assert over parsed Span positions, will be tedious to specify all positions
                     cfg => cfg.Excluding(x => x.Name == "Span")
                 );
+        }
+        
+        [Test]
+        [TestCase("1 + bool 2")]
+        [TestCase("1 - bool 2")]
+        [TestCase("1 / bool 2")]
+        [TestCase("1 * bool 2")]
+        [TestCase("1 or bool 2")]
+        [TestCase("1 unless bool 2")]
+        [TestCase("1 and bool 2")]
+        public void BinaryExpr_BoolNonComparison(string query)
+        {
+            Assert.Throws<ParseException>(() => Parse(Parser.BinaryExpr, "1 + bool 2"))
+                .Message.Should().Contain("bool modifier can only be used on comparison operators");
         }
 
         [Test]

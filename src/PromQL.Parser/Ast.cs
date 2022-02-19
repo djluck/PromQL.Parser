@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Immutable;
+using System.Text;
 using ExhaustiveMatching;
 using Superpower.Model;
+using Superpower.Parsers;
 
 namespace PromQL.Parser.Ast
 {
@@ -143,6 +145,15 @@ namespace PromQL.Parser.Ast
         public ValueType Type => Function.ReturnType;
 
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+        
+        protected virtual bool PrintMembers(StringBuilder builder)
+        {
+            builder.AppendLine($"{nameof(Function)} = {Function.Name}, ");
+            builder.Append($"{nameof(Args)} = ");
+            Args.PrintArray(builder);
+
+            return true;
+        }
     }
 
     public record ParenExpression(Expr Expr, TextSpan? Span = null) : Expr

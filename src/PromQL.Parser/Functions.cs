@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 
 namespace PromQL.Parser
 {
-    // TODO rename -> Function
     public static class Functions
     {
         /// <summary>

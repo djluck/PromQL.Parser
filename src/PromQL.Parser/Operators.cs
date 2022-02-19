@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 using ExhaustiveMatching;
 
 namespace PromQL.Parser
@@ -69,9 +70,47 @@ namespace PromQL.Parser
         }
 
         /// <summary>
+        /// The set of binary operators that operate over sets (instant vectors) only.
+        /// </summary>
+        public static ImmutableHashSet<Binary> BinarySetOperators { get; set; } = new []
+        {
+            Binary.And,
+            Binary.Or,
+            Binary.Unless
+        }.ToImmutableHashSet();
+
+        /// <summary>
+        /// The set of binary operations that compare expressions. 
+        /// </summary>
+        /// <remarks>https://github.com/prometheus/prometheus/blob/f103acd5135b8bbe885b17a73dafc7bbb586319c/promql/parser/lex.go#L71</remarks>
+        public static ImmutableHashSet<Binary> BinaryComparisonOperators { get; set; }= new[]
+        {
+            Binary.Gtr,
+            Binary.Gte,
+            Binary.Lss,
+            Binary.Lte,
+            Binary.Eql,
+            Binary.Neq
+        }.ToImmutableHashSet();
+
+        /// <summary>
+        /// Operators are ordered by highest -> lowest precedence. 
+        /// </summary>
+        public static ImmutableArray<ImmutableHashSet<Binary>> BinaryPrecedence { get; set; } = new[]
+        {
+            // TODO support right associativity for pow!
+            new[] { Binary.Pow },
+            new[] { Binary.Mul, Binary.Div, Binary.Atan2, Binary.Mod },
+            new[] { Binary.Add, Binary.Sub },
+            new[] { Binary.Eql, Binary.Neq, Binary.Gtr, Binary.Gte, Binary.Lss, Binary.Lte },
+            new[] { Binary.And, Binary.Unless },
+            new[] { Binary.Or }
+        }.Select(x => x.ToImmutableHashSet()).ToImmutableArray();
+
+        /// <summary>
         /// Defines the set of all valid aggregator operators (e.g. sum, avg, etc.)
         /// </summary>
-        public static ImmutableDictionary<string, AggregateOperator> Aggregates = new []
+        public static ImmutableDictionary<string, AggregateOperator> Aggregates { get; set; } = new []
         {
             new AggregateOperator("sum"),
             new AggregateOperator("avg"),

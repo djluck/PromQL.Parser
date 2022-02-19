@@ -250,8 +250,8 @@ namespace PromQL.Parser
             from id in Token.EqualTo(PromToken.IDENTIFIER).Where(x => Functions.Map.ContainsKey(x.ToStringValue())).Try()
             let function = Functions.Map[id.ToStringValue()] 
             from args in FunctionArgs
-                .Where(a => function.IsVariadic || (!function.IsVariadic && function.ArgTypes.Length == a.Value.Length), $"Incorrect number of argument(s) in call to {function.Name}, expected {function.ArgTypes.Length} argument(s).")
-                .Where(a => !function.IsVariadic || (function.IsVariadic && a.Value.Length >= function.MinArgCount), $"Incorrect number of argument(s) in call to {function.Name}, expected at least {function.MinArgCount} argument(s).")
+                .Where(a => function.IsVariadic || (!function.IsVariadic && function.ArgTypes.Length == a.Value.Length), $"Incorrect number of argument(s) in call to {function.Name}, expected {function.ArgTypes.Length} argument(s)")
+                .Where(a => !function.IsVariadic || (function.IsVariadic && a.Value.Length >= function.MinArgCount), $"Incorrect number of argument(s) in call to {function.Name}, expected at least {function.MinArgCount} argument(s)")
                 // TODO validate "at most" arguments- https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/parse.go#L552
             select new FunctionCall(function, args.Value.ToImmutableArray(), id.Span.UntilEnd(args.Span));
 
@@ -334,11 +334,75 @@ namespace PromQL.Parser
         };
         
         public static TokenListParser<PromToken, BinaryExpr> BinaryExpr =
-            from lhs in Parse.Ref(() => ExprNotBinary)
-            from op in Token.Matching<PromToken>(x => BinaryOperatorMap.ContainsKey(x), "binary_op")
-            from vm in VectorMatching.AsNullable().OptionalOrDefault()
-            from rhs in Parse.Ref(() => Expr)
-            select new BinaryExpr(lhs, rhs, BinaryOperatorMap[op.Kind], vm, lhs.Span!.Value.UntilEnd(rhs.Span));
+            // Sprache doesn't support lef recursive grammars so we have to parse out binary expressions as lists of non-binary expressions 
+            from head in Parse.Ref(() => ExprNotBinary)
+            from tail in (
+                from opToken in Token.Matching<PromToken>(x => BinaryOperatorMap.ContainsKey(x), "binary_op")
+                let op = BinaryOperatorMap[opToken.Kind]
+                from vm in VectorMatching.AsNullable().OptionalOrDefault()
+                    .Where(x => x is not { ReturnBool: true } || (x.ReturnBool && Operators.BinaryComparisonOperators.Contains(op)), "bool modifier can only be used on comparison operators")
+                from expr in Parse.Ref(() => ExprNotBinary)
+                select (op, vm, expr)
+            ).AtLeastOnce()
+            select CreateBinaryExpression(head, tail);
+
+        /// <summary>
+        /// Creates a binary expression from a collection of two or more operands and one or more operators.
+        /// </summary>
+        /// <remarks>
+        /// This function need to ensure operator precedence is maintained, e.g. 1 + 2 * 3 or 4 should parsed as (1 + (2 * 3)) or 4.
+        /// </remarks>
+        /// <param name="head">The first operand</param>
+        /// <param name="tail">The trailing operators, vector matching + operands</param>
+        private static BinaryExpr CreateBinaryExpression(Expr head, (Operators.Binary op, VectorMatching? vm, Expr expr)[] tail)
+        {
+            // Just two operands, no need to do any precedence checking
+            if (tail.Length == 1)
+                return new BinaryExpr(head, tail[0].expr, tail[0].op, tail[0].vm, head.Span!.Value.UntilEnd(tail[0].expr.Span));
+
+            // Three + operands and we need to group subexpressions by precedence. First things first: create linked lists of all our operands and operators
+            var operands = new LinkedList<Expr>(new[] { head }.Concat(tail.Select(x => x.expr)));
+            var operators = new LinkedList<(Operators.Binary op, VectorMatching? vm)>(tail.Select(x => (x.op, x.vm)));
+
+            // Iterate through each level of operator precedence, moving from highest -> lowest
+            foreach (var precedenceLevel in Operators.BinaryPrecedence)
+            {
+                var lhs = operands.First;
+                var op = operators.First;
+                
+                // While we have operators left to consume, iterate through each operand + operator
+                while (op != null)
+                {
+                    var rhs = lhs!.Next!;
+                    
+                    // This operator has the same precedence of the current precedence level- create a new binary subexpression with the current operands + operators
+                    if (precedenceLevel.Contains(op.Value.op))
+                    {
+                        var b = new BinaryExpr(lhs.Value, rhs.Value, op.Value.op, op.Value.vm, lhs.Value.Span!.Value.UntilEnd(rhs.Value.Span)); // TODO span matching
+                        var bNode = operands.AddBefore(rhs, b); 
+                        
+                        // Remove the previous operands (will replace with our new binary expression)
+                        operands.Remove(lhs);
+                        operands.Remove(rhs);
+                        
+                        lhs = bNode;
+                        var nextOp = op.Next;
+                        
+                        // Remove the operator
+                        operators.Remove(op);
+                        op = nextOp;
+                    }
+                    else
+                    {
+                        // Move on to the next operand + operator
+                        lhs = rhs;
+                        op = op.Next;
+                    }
+                }
+            }
+
+            return (BinaryExpr)operands.Single();
+        }
 
         public static TokenListParser<PromToken, ParsedValue<(bool without, ImmutableArray<string> labels)>> AggregateModifier =
             from kind in Token.EqualTo(PromToken.BY).Try()
