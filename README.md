@@ -91,7 +91,7 @@ Superpower.ParseException: Syntax error (line 1, column 21): Unexpected left bra
 
 
 ### Type checking
-Syntax is not only validated but expressions can also be typed checked via `CheckType`, e.g:
+The syntax of expressions is not only validated but the resulting types of expressions can be validated and returned with `CheckType`, e.g:
 ```csharp
 Parser.ParseExpression("1 + sum_over_time(some_metric[1h])").CheckType();
 ```
