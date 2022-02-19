@@ -54,7 +54,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void Aggregate_ToPromQl()
         {
-            _printer.ToPromQl(new AggregateExpr("sum",
+            _printer.ToPromQl(new AggregateExpr(Operators.Aggregates["sum"],
                 new VectorSelector(new MetricIdentifier("test_expr")),
                 null, 
                 ImmutableArray<string>.Empty, 
@@ -65,7 +65,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void Aggregate_WithLabels_ToPromQl()
         {
-            _printer.ToPromQl(new AggregateExpr("sum",
+            _printer.ToPromQl(new AggregateExpr(Operators.Aggregates["sum"],
                 new VectorSelector(new MetricIdentifier("test_expr")),
                 null, 
                 new [] { "one" }.ToImmutableArray(),
@@ -76,7 +76,7 @@ namespace PromQL.Parser.Tests
         [Test]
         public void Aggregate_WithParam_ToPromQl()
         {
-            _printer.ToPromQl(new AggregateExpr("quantile",
+            _printer.ToPromQl(new AggregateExpr(Operators.Aggregates["quantile"],
                 new VectorSelector(new MetricIdentifier("test_expr")),
                 new NumberLiteral(1),
                 new[] {"label1", "label2"}.ToImmutableArray(),
@@ -181,13 +181,13 @@ namespace PromQL.Parser.Tests
                 ),
                 new UnaryExpr(
                     Operators.Unary.Sub,
-                    new FunctionCall("sum", new Expr[]
+                    new FunctionCall(Functions.Map["vector"], new Expr[]
                     {
                         new OffsetExpr(new VectorSelector(new MetricIdentifier("this_is_a_metric")), new Duration(TimeSpan.FromMinutes(5)))
                     }.ToImmutableArray())
                 ),
                 Operators.Binary.Add,
                 null
-            )).Should().Be("(another_metric{one='test', two!='test2'}[1h][1d:5m]) + -sum(this_is_a_metric offset 5m)");
+            )).Should().Be("(another_metric{one='test', two!='test2'}[1h][1d:5m]) + -vector(this_is_a_metric offset 5m)");
     }
 }

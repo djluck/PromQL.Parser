@@ -4,6 +4,8 @@ using PromQL.Parser.Ast;
 
 namespace PromQL.Parser
 {
+    // TODO fix bug around "and"
+    // TODO pretty print support
     public class Printer : IVisitor
     {
         private StringBuilder _sb = new ();
@@ -132,7 +134,7 @@ namespace PromQL.Parser
 
         public virtual void Visit(FunctionCall fnCall)
         {
-            _sb.Append($"{fnCall.Identifier}(");
+            _sb.Append($"{fnCall.Function.Name}(");
 
             bool isFirst = true;
             foreach (var arg in fnCall.Args)
@@ -199,7 +201,7 @@ namespace PromQL.Parser
 
         public virtual void Visit(AggregateExpr expr)
         {
-            _sb.Append($"{expr.OperatorName}");
+            _sb.Append($"{expr.Operator.Name}");
 
             if (expr.GroupingLabels.Length > 0)
             {

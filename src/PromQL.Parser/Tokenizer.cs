@@ -87,7 +87,7 @@ namespace PromQL.Parser
             .Select(x =>
             {
                 var idOrKeyword = x.ToStringValue();
-                if (Operators.Aggregates.Contains(idOrKeyword))
+                if (Operators.Aggregates.ContainsKey(idOrKeyword))
                     return PromToken.AGGREGATE_OP;
                 if (KeywordsToTokens.TryGetValue(idOrKeyword, out var keyToken))
                     return keyToken;
