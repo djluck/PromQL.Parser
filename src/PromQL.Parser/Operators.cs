@@ -92,6 +92,20 @@ namespace PromQL.Parser
             Binary.Eql,
             Binary.Neq
         }.ToImmutableHashSet();
+        
+        /// <summary>
+        /// The set of binary operations that are arithmetic operators. 
+        /// </summary>
+        /// <remarks>https://prometheus.io/docs/prometheus/latest/querying/operators/#arithmetic-binary-operators</remarks>
+        public static ImmutableHashSet<Binary> BinaryArithmeticOperators { get; set; }= new[]
+        {
+            Binary.Add,
+            Binary.Sub,
+            Binary.Mod,
+            Binary.Mul,
+            Binary.Div,
+            Binary.Pow
+        }.ToImmutableHashSet();
 
         /// <summary>
         /// Operators are ordered by highest -> lowest precedence. 
