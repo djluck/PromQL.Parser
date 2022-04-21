@@ -128,9 +128,9 @@ namespace PromQL.Parser.Ast
         {
         }
 
-        public Operators.VectorMatchCardinality MatchCardinality { get; } = MatchCardinality;
+        public Operators.VectorMatchCardinality MatchCardinality { get; internal set; } = MatchCardinality;
         public bool On { get; } = On;
-        public ImmutableArray<string> Include { get; } = Include;
+        public ImmutableArray<string> Include { get; internal set; } = Include;
         public bool ReturnBool { get; } = ReturnBool;
 
         public void Accept(IVisitor visitor) => visitor.Visit(this);
