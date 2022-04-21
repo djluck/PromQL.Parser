@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Text;
 using ExhaustiveMatching;
 using Superpower.Model;
-using Superpower.Parsers;
 
 namespace PromQL.Parser.Ast
 {
     /// <summary>
     /// Base of all PromQL syntactic components.
     /// </summary>
-    public interface IPromQlNode
+    public interface IPromQlNode 
     {
         void Accept(IVisitor visitor);
         TextSpan? Span { get; }
@@ -35,6 +35,12 @@ namespace PromQL.Parser.Ast
     public interface Expr : IPromQlNode
     {
         ValueType Type { get; }
+        
+        /// <summary>
+        /// Makes a deep clone of an expression.
+        /// </summary>
+        /// <returns></returns>
+        public Expr DeepClone();
     }
 
     /// <summary>
@@ -67,6 +73,7 @@ namespace PromQL.Parser.Ast
         public ValueType Type => ValueType.Vector;
         
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+        public Expr DeepClone() => this with {Expr = Expr.DeepClone(), Param = Param?.DeepClone() };
     }
 
     /// <summary>
@@ -95,6 +102,8 @@ namespace PromQL.Parser.Ast
                 return ValueType.Vector;
             }
         }
+        
+        public Expr DeepClone() => this with { LeftHandSide = LeftHandSide.DeepClone(), RightHandSide = RightHandSide.DeepClone() };
     }
 
     /// <summary>
@@ -119,10 +128,10 @@ namespace PromQL.Parser.Ast
         {
         }
 
-        public Operators.VectorMatchCardinality MatchCardinality { get; set; } = MatchCardinality;
-        public bool On { get; set; } = On;
-        public ImmutableArray<string> Include { get; set; } = Include;
-        public bool ReturnBool { get; set; } = ReturnBool;
+        public Operators.VectorMatchCardinality MatchCardinality { get; internal set; } = MatchCardinality;
+        public bool On { get; } = On;
+        public ImmutableArray<string> Include { get; internal set; } = Include;
+        public bool ReturnBool { get; } = ReturnBool;
 
         public void Accept(IVisitor visitor) => visitor.Visit(this);
     };
@@ -146,6 +155,8 @@ namespace PromQL.Parser.Ast
 
         public void Accept(IVisitor visitor) => visitor.Visit(this);
         
+        public Expr DeepClone() => this with { Args = Args.Select(a => a.DeepClone()).ToImmutableArray() };
+        
         protected virtual bool PrintMembers(StringBuilder builder)
         {
             builder.AppendLine($"{nameof(Function)} = {Function.Name}, ");
@@ -161,6 +172,7 @@ namespace PromQL.Parser.Ast
         public Expr Expr { get; set; } = Expr;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
         public ValueType Type => Expr.Type;
+        public Expr DeepClone() => this with { Expr = Expr.DeepClone() };
     }
 
     public record OffsetExpr(Expr Expr, Duration Duration, TextSpan? Span = null) : Expr
@@ -169,6 +181,7 @@ namespace PromQL.Parser.Ast
         public Duration Duration { get; set; } = Duration;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
         public ValueType Type => Expr.Type;
+        public Expr DeepClone() => this with { Expr = Expr.DeepClone() };
     }
 
     public record MatrixSelector(VectorSelector Vector, Duration Duration, TextSpan? Span = null) : Expr
@@ -177,6 +190,7 @@ namespace PromQL.Parser.Ast
         public Duration Duration { get; set; } = Duration;
         public void Accept(IVisitor visitor) => visitor.Visit(this);
         public ValueType Type => ValueType.Matrix;
+        public Expr DeepClone() => this with { };
     }
 
     public record UnaryExpr(Operators.Unary Operator, Expr Expr, TextSpan? Span = null) : Expr
@@ -186,6 +200,7 @@ namespace PromQL.Parser.Ast
         
         public void Accept(IVisitor visitor) => visitor.Visit(this);
         public ValueType Type => Expr.Type;
+        public Expr DeepClone() => this with { Expr = Expr.DeepClone() };
     }
     
     public record VectorSelector : Expr
@@ -216,11 +231,12 @@ namespace PromQL.Parser.Ast
         public ValueType Type => ValueType.Vector;
         
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+        public Expr DeepClone() => this with { };
     }
 
     public record LabelMatchers(ImmutableArray<LabelMatcher> Matchers, TextSpan? Span = null) : IPromQlNode
     {
-        protected virtual bool PrintMembers(System.Text.StringBuilder builder)
+        protected virtual bool PrintMembers(StringBuilder builder)
         {
             builder.Append($"{nameof(Matchers)} = ");
             Matchers.PrintArray(builder);
@@ -247,6 +263,7 @@ namespace PromQL.Parser.Ast
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
         public ValueType Type => ValueType.Scalar;
+        public Expr DeepClone() => this with { };
     }
 
     public record Duration(TimeSpan Value, TextSpan? Span = null) : IPromQlNode 
@@ -258,6 +275,7 @@ namespace PromQL.Parser.Ast
     {
         public void Accept(IVisitor visitor) => visitor.Visit(this);
         public ValueType Type => ValueType.String;
+        public Expr DeepClone() => this with { };
     }
 
     public record SubqueryExpr(Expr Expr, Duration Range, Duration? Step = null, TextSpan? Span = null) : Expr
@@ -268,6 +286,7 @@ namespace PromQL.Parser.Ast
         public ValueType Type => ValueType.Matrix;
         
         public void Accept(IVisitor visitor) => visitor.Visit(this);
+        public Expr DeepClone() => this with { Expr = Expr.DeepClone() };
     }
     
     internal static class Extensions
@@ -278,7 +297,7 @@ namespace PromQL.Parser.Ast
             sb.Append("[ ");
             for (int i = 0; i < arr.Length; i++)
             {
-                sb.Append(arr[i].ToString());
+                sb.Append(arr[i]);
                 if (i < arr.Length - 1)
                     sb.Append(", ");
             }
