@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netcoreapp3.1</TargetFramework>
+        <TargetFrameworks>netcoreapp3.1;net6.0</TargetFrameworks>
         <LangVersion>9</LangVersion>
         <Nullable>enable</Nullable>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -19,7 +19,7 @@
     
     <ItemGroup>
         <PackageReference Include="ExhaustiveMatching.Analyzer" Version="0.5.0" />
-        <PackageReference Include="IsExternalInit" Version="1.0.1">
+        <PackageReference Include="IsExternalInit" Version="1.0.1" Condition="$(TargetFramework) == 'netcoreapp3.1'">
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
