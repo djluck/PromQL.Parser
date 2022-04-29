@@ -36,7 +36,7 @@ namespace PromQL.Parser
             .Select(x => Enum.Parse<PromToken>(x.enumMember.Name))
             .ToHashSet();
 
-        private static readonly HashSet<PromToken> AlphanumericOperatorTokens = FindTokensMatching(attr => attr.Category == "Operator" && Regex.IsMatch(attr.Example, "^[a-zA-Z0-9]+$"))
+        private static readonly HashSet<PromToken> AlphanumericOperatorTokens = FindTokensMatching(attr => attr.Category == "Operator" && Regex.IsMatch(attr.Example!, "^[a-zA-Z0-9]+$"))
             .ToHashSet();
 
         private static readonly HashSet<PromToken> KeywordAndAlphanumericOperatorTokens = FindTokensMatching(attr => attr.Category == "Keyword")

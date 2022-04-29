@@ -10,6 +10,8 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: '6.0.x'
     - run: |
         echo "Github ref is ${GITHUB_REF}"
         arrTag=(${GITHUB_REF//\// })
