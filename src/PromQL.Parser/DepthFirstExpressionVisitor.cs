@@ -36,7 +36,7 @@ namespace PromQL.Parser
         void IVisitor.Visit(MatrixSelector ms)
         {
             _expressions.Add(ms);
-            // No need to visit vector selector, it's accessible from matrix selector
+            ms.Vector.Accept(this);
         }
 
         void IVisitor.Visit(OffsetExpr offset)

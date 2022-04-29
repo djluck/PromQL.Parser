@@ -40,6 +40,7 @@ namespace PromQL.Parser.Tests
                         typeof(FunctionCall),
                         typeof(OffsetExpr),
                         typeof(MatrixSelector),
+                        typeof(VectorSelector),
                         typeof(UnaryExpr),
                         typeof(ParenExpression),
                         typeof(SubqueryExpr),
