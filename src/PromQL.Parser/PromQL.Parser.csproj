@@ -19,7 +19,7 @@
     
     <ItemGroup>
         <PackageReference Include="ExhaustiveMatching.Analyzer" Version="0.5.0" />
-        <PackageReference Include="IsExternalInit" Version="1.0.1">
+        <PackageReference Include="IsExternalInit" Version="1.0.1" Condition="$(TargetFramework) == 'netcoreapp3.1'">
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
