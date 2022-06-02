@@ -8,7 +8,7 @@ namespace PromQL.Parser
     // TODO pretty print support
     public class Printer : IVisitor
     {
-        private StringBuilder _sb = new ();
+        protected StringBuilder _sb = new ();
 
         public virtual void Visit(StringLiteral s)
         {
