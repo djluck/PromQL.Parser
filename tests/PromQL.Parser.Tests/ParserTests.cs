@@ -830,9 +830,10 @@ namespace PromQL.Parser.Tests
         [TestCase("1 or bool 2")]
         [TestCase("1 unless bool 2")]
         [TestCase("1 and bool 2")]
+        [TestCase("1 > bool 1 or bool 1 < bool 1")]
         public void BinaryExpr_BoolNonComparison(string query)
         {
-            Assert.Throws<ParseException>(() => Parse(Parser.BinaryExpr, "1 + bool 2"))
+            Assert.Throws<ParseException>(() => Parse(Parser.BinaryExpr, query))
                 .Message.Should().Contain("bool modifier can only be used on comparison operators");
         }
 
