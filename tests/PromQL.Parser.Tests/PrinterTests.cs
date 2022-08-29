@@ -136,7 +136,7 @@ namespace PromQL.Parser.Tests
                 false,
                 ImmutableArray<string>.Empty,
                 false
-            )).Should().Be("group_right");
+            )).Should().Be("group_right ()");
         }
         
         [Test]

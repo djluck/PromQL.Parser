@@ -173,7 +173,7 @@ namespace PromQL.Parser
                 _sb.Append(vm.MatchCardinality.ToPromQl());
             }
 
-            if (vm.Include.Length > 0)
+            if (vm.Include.Length > 0 || vm.MatchCardinality != VectorMatching.DefaultMatchCardinality)
             {
                 if (_sb.Length > 0)
                     _sb.Append(" ");
