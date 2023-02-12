@@ -53,6 +53,10 @@ namespace PromQL.Parser.Tests
 
         public class CustomPrinter : Printer
         {
+            public CustomPrinter() : base(PrinterOptions.NoFormatting)
+            {
+            }
+            
             public override void Visit(Duration d)
             {
                 if (d.Value == new TimeSpan(-1))
