@@ -7,9 +7,9 @@ using PromQL.Parser.Ast;
 namespace PromQL.Parser.Tests
 {
     [TestFixture]
-    public class PrettyPrinterTests
+    public class PrinterTests
     {
-        private Printer _printer = new Printer();
+        private Printer _printer = new Printer(PrinterOptions.NoFormatting);
         
         [Test]
         public void StringLiteral_SingleQuote() => _printer.ToPromQl(new StringLiteral('\'', "hello")).Should().Be("'hello'");
@@ -158,6 +158,23 @@ namespace PromQL.Parser.Tests
                 new Duration(TimeSpan.FromHours(-5))))
                 .Should().Be("foo offset -5h");
         }
+        
+        [Test]
+        public void BinaryExpr_OnNoLabels_ToPromQl()
+        {
+            _printer.ToPromQl(new BinaryExpr(
+                new NumberLiteral(1.0),
+                new NumberLiteral(2.0),
+                Operators.Binary.Add,
+                new VectorMatching(
+                    Operators.VectorMatchCardinality.OneToOne,
+                    ImmutableArray<string>.Empty,
+                    true,
+                    ImmutableArray<string>.Empty,
+                    false
+                )
+            )).Should().Be("1 + on () 2");
+        }
 
         // This expression doesn't have to be valid PromQL to be a useful test
         [Test]
@@ -189,5 +206,38 @@ namespace PromQL.Parser.Tests
                 Operators.Binary.Add,
                 null
             )).Should().Be("(another_metric{one='test', two!='test2'}[1h][1d:5m]) + -vector(this_is_a_metric offset 5m)");
+    }
+
+    [TestFixture]
+    public class PrettyPrintTests
+    {
+        private Printer _printer = new Printer(PrinterOptions.PrettyDefault);
+        
+        [Test]
+        public void ParenExpression() => _printer.ToPromQl(new ParenExpression(new NumberLiteral(1.0)))
+            .Should().Be(@"(
+  1
+)");
+        
+        [Test]
+        public void ParenExpressionNested() => _printer.ToPromQl(new ParenExpression(new ParenExpression(new NumberLiteral(1.0))))
+            .Should().Be(@"(
+  (
+    1
+  )
+)");
+        
+        [Test]
+        public void BinaryExpression() => _printer.ToPromQl(new BinaryExpr(new NumberLiteral(1.0), new NumberLiteral(1.0), Operators.Binary.Add))
+            .Should().Be(@"1
++ 1");
+        
+        [Test]
+        public void ParenBinaryExpression() => _printer.ToPromQl(new ParenExpression(new BinaryExpr(new NumberLiteral(1.0), new NumberLiteral(1.0), Operators.Binary.Add)))
+            .Should().Be(@"(
+  1
+  + 1
+)");
+
     }
 }
