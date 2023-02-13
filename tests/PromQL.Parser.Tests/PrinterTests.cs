@@ -214,30 +214,74 @@ namespace PromQL.Parser.Tests
         private Printer _printer = new Printer(PrinterOptions.PrettyDefault);
         
         [Test]
-        public void ParenExpression() => _printer.ToPromQl(new ParenExpression(new NumberLiteral(1.0)))
-            .Should().Be(@"(
-  1
+        public void ParenExpressionShort() => _printer.ToPromQl(new ParenExpression(new NumberLiteral(1.0)))
+            .Should().Be(@"(1)");
+        
+        [Test]
+        public void ParenExpressionNestedShort() => _printer.ToPromQl(new ParenExpression(new ParenExpression(new NumberLiteral(1.0))))
+            .Should().Be(@"((1))");
+        
+        [Test]
+        public void BinaryExpressionShort() => _printer.ToPromQl(new BinaryExpr(new NumberLiteral(1.0), new NumberLiteral(1.0), Operators.Binary.Add))
+            .Should().Be(@"1 + 1");
+        
+        [Test]
+        public void ParenBinaryExpressionShort() => _printer.ToPromQl(new ParenExpression(new BinaryExpr(new NumberLiteral(1.0), new NumberLiteral(1.0), Operators.Binary.Add)))
+            .Should().Be(@"(1 + 1)");
+        
+        [Test]
+        public void BinaryExpression() => _printer.ToPromQl(Parser.ParseExpression("sum(rate(this_is_a_long_metric_name{environment='production'}[5m])) + sum(rate(this_is_another_long_metric_name{environment='production'}[5m]))"))
+            .Should().Be(
+@"sum(rate(this_is_a_long_metric_name{environment='production'}[5m])) 
++ sum(rate(this_is_another_long_metric_name{environment='production'}[5m]))");
+        
+        [Test]
+        public void BinaryWrappedParenExpression() => _printer.ToPromQl(Parser.ParseExpression("(sum(rate(this_is_a_long_metric_name{environment='production'}[5m])) + sum(rate(this_is_another_long_metric_name{environment='production'}[5m])))"))
+            .Should().Be(
+                @"(
+  sum(rate(this_is_a_long_metric_name{environment='production'}[5m])) 
+  + sum(rate(this_is_another_long_metric_name{environment='production'}[5m]))
 )");
         
         [Test]
-        public void ParenExpressionNested() => _printer.ToPromQl(new ParenExpression(new ParenExpression(new NumberLiteral(1.0))))
-            .Should().Be(@"(
+        public void BinaryWrappedParenExpression2() => _printer.ToPromQl(Parser.ParseExpression("((sum(rate(this_is_a_long_metric_name{environment='production'}[5m])) + sum(rate(this_is_another_long_metric_name{environment='production'}[5m]))))"))
+            .Should().Be(
+                @"(
   (
-    1
+    sum(rate(this_is_a_long_metric_name{environment='production'}[5m])) 
+    + sum(rate(this_is_another_long_metric_name{environment='production'}[5m]))
   )
 )");
         
         [Test]
-        public void BinaryExpression() => _printer.ToPromQl(new BinaryExpr(new NumberLiteral(1.0), new NumberLiteral(1.0), Operators.Binary.Add))
-            .Should().Be(@"1
-+ 1");
+        public void BinaryExpression2() => _printer.ToPromQl(Parser.ParseExpression("1 + 2 + 3 + 4 + 5 + sum(rate(this_is_another_long_metric_name{environment='production', code=~'5.*'}[5m]))"))
+            .Should().Be(
+@"1 
++ 2 
++ 3 
++ 4 
++ 5 
++ sum(rate(this_is_another_long_metric_name{environment='production', code=~'5.*'}[5m]))");
         
         [Test]
-        public void ParenBinaryExpression() => _printer.ToPromQl(new ParenExpression(new BinaryExpr(new NumberLiteral(1.0), new NumberLiteral(1.0), Operators.Binary.Add)))
-            .Should().Be(@"(
-  1
-  + 1
-)");
+        public void BinaryExpressionNestedParenShort() => _printer.ToPromQl(Parser.ParseExpression("1 + 2 + (3 + (4 + 5))"))
+            .Should().Be(
+                @"1 + 2 + (3 + (4 + 5))");
+        
+        [Test]
+        public void BinaryExpressionNestedParenLong() => _printer.ToPromQl(Parser.ParseExpression("1 + (2 + 3) + sum(rate(this_is_another_long_metric_name{environment='production', code=~'5.*', endpoint='/api/test'}[5m]))"))
+            .Should().Be(
+@"1 
++ (2 + 3) 
++ sum(rate(this_is_another_long_metric_name{environment='production', code=~'5.*', endpoint='/api/test'}[5m]))");
 
+        
+        [Test]
+        public void ParenBinaryExpression() => _printer.ToPromQl(Parser.ParseExpression("(sum(rate(this_is_a_long_metric_name{environment='production'}[5m])) + sum(rate(this_is_another_long_metric_name{environment='production'}[5m])))"))
+            .Should().Be(@"(
+  sum(rate(this_is_a_long_metric_name{environment='production'}[5m])) 
+  + sum(rate(this_is_another_long_metric_name{environment='production'}[5m]))
+)");
+        
     }
 }
