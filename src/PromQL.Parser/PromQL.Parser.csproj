@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFrameworks>netcoreapp3.1;net6.0</TargetFrameworks>
-        <LangVersion>9</LangVersion>
+        <LangVersion>10</LangVersion>
         <Nullable>enable</Nullable>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <PackageId>PromQL.Parser</PackageId>

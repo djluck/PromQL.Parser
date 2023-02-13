@@ -24,7 +24,7 @@ namespace PromQL.Parser
         public Printer(PrinterOptions? options = null)
         {
             _options = options ?? PrinterOptions.PrettyDefault;
-            _sb = new IndentedStringBuilder(_options.IndentChar, _options.IndentCount);
+            _sb = new IndentedStringBuilder(_options.IndentChar, _options.IndentCount, _options.BreakAfterCharCount);
         }
 
         public virtual void Visit(StringLiteral s)
@@ -146,7 +146,7 @@ namespace PromQL.Parser
         {
             Write("(");
 
-            using (_options.BreakOnParenExpr ? _sb.IncreaseIndent() : null)
+            using (_options.BreakOnParenExpr ? _sb.StartScope() : null)
                 paren.Expr.Accept(this);
             
             Write(")");
@@ -209,12 +209,11 @@ namespace PromQL.Parser
         public virtual void Visit(BinaryExpr expr)
         {
             expr.LeftHandSide.Accept(this);
+            Write(" ");
             
             if (_options.BreakOnBinaryOperators)
-                _sb.AppendLine();
-            else
-                Write(" ");
-            
+                _sb.AddPotentialBreakPoint();
+
             Write($"{expr.Operator.ToPromQl()} ");
 
             var preLen = _sb.Length;
@@ -259,7 +258,8 @@ namespace PromQL.Parser
                 throw new ArgumentNullException();
             
             _sb.Clear();
-            node.Accept(this);
+            using(_sb.StartScope())
+                node.Accept(this);
 
             return _sb.ToString()!;
         }
@@ -267,47 +267,85 @@ namespace PromQL.Parser
 
     internal class IndentedStringBuilder
     {
-        private int _indentLevel = 0;
         private readonly string[] _indents;
         private const int MaxIndent = 20;
         private StringBuilder _sb = new StringBuilder();
-        
-        public IndentedStringBuilder(char indentChar, int indentCount)
+        private Stack<Scope> _scopes = new Stack<Scope>();
+        private readonly int _idealLineLength;
+
+        public IndentedStringBuilder(char indentChar, int indentCount, int idealLineLength)
         {
+            _idealLineLength = idealLineLength;
             _indents = Enumerable.Range(0, MaxIndent)
-                .Select(n => new string(Enumerable.Repeat(indentChar, indentCount * n).ToArray()))
+                .Select(n => Environment.NewLine + new string(Enumerable.Repeat(indentChar, indentCount * n).ToArray()))
                 .ToArray();
         }
 
-        public void Append(string? s) => _sb.Append(s);
-
+        public void Append(string? s)
+        {
+            CheckForScope();
+            _sb.Append(s);
+        }
+        
         public int Length => _sb.Length;
 
         public void Clear() => _sb.Clear();
 
-        public void AppendLine()
+        private void AppendLine(int indent)
         {
-            _sb.AppendLine();
-            _sb.Append(_indents[_indentLevel]);
+            _sb.Append(_indents[indent]);
         }
 
         public override string ToString() => _sb.ToString();
 
-        public IDisposable IncreaseIndent()
+        public IDisposable StartScope()
         {
-            _indentLevel++;
-            if (_indentLevel == MaxIndent)
+            if (_scopes.Count == MaxIndent)
                 throw new InvalidOperationException($"Cannot increase indent beyond {MaxIndent}");
 
-            AppendLine();
+            _scopes.Push(new Scope(_sb.Length));
+            
             return new DisposableIndent(this);
         }
 
-        public void DecreaseIndent()
+        public void AddPotentialBreakPoint() => _scopes.Peek().BreakPositions.Add(_sb.Length);
+
+        public void EndScope()
         {
-            _indentLevel--;
-            AppendLine();
+            var indentLevel = _scopes.Count - 1;
+            var scope = _scopes.Pop();
+
+            if (_sb.Length - scope.StartIndex <= _idealLineLength)
+                return;
+            
+            int insertedIndent = 0;
+
+            if (scope.StartIndex > 0)
+            {
+                _sb.Insert(scope.StartIndex, _indents[indentLevel]);
+                insertedIndent += _indents[indentLevel].Length;
+            }
+
+            foreach (var i in scope.BreakPositions)
+            {
+                _sb.Insert(i + insertedIndent, _indents[indentLevel]);
+                insertedIndent += _indents[indentLevel].Length;
+            }
+
+            if (indentLevel != 0)
+                AppendLine(indentLevel - 1);
         }
+        
+        private void CheckForScope()
+        {
+            if (_scopes.Count == 0)
+                throw new InvalidOperationException($"Must start a scope with {nameof(StartScope)}()");
+        }
+
+        public record struct Scope(int StartIndex)
+        {
+            public List<int> BreakPositions { get; } = new ();
+        };
 
         internal class DisposableIndent : IDisposable
         {
@@ -325,7 +363,7 @@ namespace PromQL.Parser
                 if (_disposed)
                     return;
                 
-                _isb.DecreaseIndent();
+                _isb.EndScope();
                 _disposed = true;
             }
         }
@@ -335,18 +373,19 @@ namespace PromQL.Parser
         int IndentCount,
         char IndentChar,
         bool BreakOnParenExpr,
-        bool BreakOnBinaryOperators
+        bool BreakOnBinaryOperators,
+        int BreakAfterCharCount
     )
     {
         /// <summary>
         /// Formats the printed output of PromQL expressions into a more human-readable format,
         /// by inserting line breaks and indentation. 
         /// </summary>
-        public static PrinterOptions PrettyDefault = new(2, ' ', true, true);
+        public static PrinterOptions PrettyDefault = new(2, ' ', true, true, 100);
         
         /// <summary>
         /// Doesn't format the printed output of PromQL expressions.
         /// </summary>
-        public static PrinterOptions NoFormatting = new(0, ' ', false, false);
+        public static PrinterOptions NoFormatting = new(0, ' ', false, false, int.MaxValue);
     }
 }
