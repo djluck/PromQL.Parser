@@ -18,4 +18,4 @@ jobs:
         VERSION="${arrTag[2]}"
         echo "Version: $VERSION"
         dotnet pack src/PromQL.Parser --include-symbols -c "Release" -p:Version=$VERSION  --output "build/"
-        dotnet nuget push "build/PromQL.Parser.*.symbols.nupkg" -k ${{ secrets.NUGET_API_KEY }} -s "https://api.nuget.org/v3/index.json" -n true
+        dotnet nuget push "build/PromQL.Parser.*.symbols.nupkg" -k ${{ secrets.NUGET_API_KEY }} -s "https://api.nuget.org/v3/index.json" --no-symbols
