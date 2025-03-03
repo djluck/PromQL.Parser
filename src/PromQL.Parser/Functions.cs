@@ -9,7 +9,7 @@ namespace PromQL.Parser
         /// </summary>
         /// <remarks>
         /// Primarily taken from https://github.com/prometheus/prometheus/blob/main/web/ui/module/codemirror-promql/src/grammar/promql.grammar#L121-L188.
-        /// More authoritative source would be https://github.com/prometheus/prometheus/blob/7471208b5c8ff6b65b644adedf7eb964da3d50ae/promql/parser/functions.go.
+        /// More authoritative source would be https://github.com/prometheus/prometheus/blob/38fd48e6b54b5413b5281efbeeb989a44845be34/promql/parser/functions.go.
         /// </remarks>
         public static ImmutableDictionary<string, Function> Map { get; set; } = new[]
         {
@@ -34,15 +34,23 @@ namespace PromQL.Parser
             new Function("days_in_month", ValueType.Vector, varadicModifier: 1 , ValueType.Vector),
             new Function("day_of_month", ValueType.Vector, varadicModifier: 1, ValueType.Vector),
             new Function("day_of_week", ValueType.Vector, varadicModifier: 1, ValueType.Vector),
+            new Function("day_of_year", ValueType.Vector, varadicModifier: 1, ValueType.Vector),
             new Function("deg", ValueType.Vector, ValueType.Vector),
             new Function("delta", ValueType.Vector, ValueType.Matrix),
             new Function("deriv", ValueType.Vector, ValueType.Matrix),
             new Function("exp", ValueType.Vector, ValueType.Vector),
             new Function("floor", ValueType.Vector, ValueType.Vector),
+            new Function("histogram_avg", ValueType.Vector, ValueType.Vector),
+            new Function("histogram_count", ValueType.Vector, ValueType.Vector),
+            new Function("histogram_sum", ValueType.Vector, ValueType.Vector),
+            new Function("histogram_stddev", ValueType.Vector, ValueType.Vector),
+            new Function("histogram_stdvar", ValueType.Vector, ValueType.Vector),
+            new Function("histogram_fraction", ValueType.Vector, ValueType.Scalar, ValueType.Scalar, ValueType.Vector),
             new Function("histogram_quantile", ValueType.Vector, ValueType.Scalar, ValueType.Vector),
-            new Function("holt_winters", ValueType.Vector, ValueType.Matrix, ValueType.Scalar, ValueType.Scalar),
+            new Function("double_exponential_smoothing", ValueType.Vector, ValueType.Matrix, ValueType.Scalar, ValueType.Scalar),
             new Function("hour", ValueType.Vector, varadicModifier: 1, ValueType.Vector),
             new Function("idelta", ValueType.Vector, ValueType.Matrix),
+            new Function("info", ValueType.Vector, varadicModifier: 1, ValueType.Vector, ValueType.Vector),
             new Function("increase", ValueType.Vector, ValueType.Matrix),
             new Function("irate", ValueType.Vector, ValueType.Matrix),
             new Function("label_replace", ValueType.Vector, ValueType.Vector, ValueType.String, ValueType.String, ValueType.String, ValueType.String),
@@ -51,6 +59,7 @@ namespace PromQL.Parser
             new Function("ln", ValueType.Vector, ValueType.Vector),
             new Function("log_10", ValueType.Vector, ValueType.Vector),
             new Function("log_2", ValueType.Vector, ValueType.Vector),
+            new Function("mad_over_time", ValueType.Vector, ValueType.Matrix),
             new Function("max_over_time", ValueType.Vector, ValueType.Matrix),
             new Function("min_over_time", ValueType.Vector, ValueType.Matrix),
             new Function("minute", ValueType.Vector, varadicModifier: 1, ValueType.Vector),
@@ -69,6 +78,8 @@ namespace PromQL.Parser
             new Function("sinh", ValueType.Vector, ValueType.Vector),
             new Function("sort", ValueType.Vector, ValueType.Vector),
             new Function("sort_desc", ValueType.Vector, ValueType.Vector),
+            new Function("sort_by_label", ValueType.Vector, varadicModifier: 0, ValueType.Vector, ValueType.String),
+            new Function("sort_by_label_desc", ValueType.Vector, varadicModifier: 0, ValueType.Vector, ValueType.String),
             new Function("sqrt", ValueType.Vector, ValueType.Vector),
             new Function("stddev_over_time", ValueType.Vector, ValueType.Matrix),
             new Function("stdvar_over_time", ValueType.Vector, ValueType.Matrix),
