@@ -383,10 +383,25 @@ namespace PromQL.Parser.Tests
         [TestCase("hour()")]
         [TestCase("hour(one)")]
         [TestCase("hour(one, two)")]
-        [TestCase("label_join(instant_vector, 'dst_label', 'separator', 'one', 'two')")]
-        public void FunctionCall_Varadic(string query)
+        public void FunctionCall_Varadic_One(string query)
         {
             Parse(Parser.Expr, query).Should().BeOfType<FunctionCall>();
+        }
+        
+        [Test]
+        public void FunctionCall_Varadic_Label_Join()
+        {
+            var exp = Parse(Parser.Expr, "label_join(instant_vector, 'dst_label', 'separator', 'one', 'two')").Should().BeOfType<FunctionCall>().Subject;
+            exp.Args.Should().HaveCount(5);
+        }
+        
+        [Test]
+        [TestCase("sort_by_label(my_metric, 'one', 'two', 'three')")]
+        [TestCase("sort_by_label_desc(my_metric, 'one', 'two', 'three')")]
+        public void FunctionCall_Varadic_Sort(string query)
+        {
+            var exp = Parse(Parser.Expr, query).Should().BeOfType<FunctionCall>().Subject;
+            exp.Args.Should().HaveCount(4);
         }
 
         [Test]
@@ -850,6 +865,8 @@ namespace PromQL.Parser.Tests
         [TestCase("stdvar (blah)", "stdvar")]
         [TestCase("sum (blah)", "sum")]
         [TestCase("topk (1, blah)", "topk")]
+        [TestCase("limitk (1, blah)", "limitk")]
+        [TestCase("limit_ratio (1, blah)", "limit_ratio")]
         public void AggregateExpr_Operator(string input, string expected) => Parse(Parser.AggregateExpr, input)
             .Operator.Name.Should().Be(expected);
 

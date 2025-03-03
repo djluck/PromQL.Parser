@@ -137,7 +137,9 @@ namespace PromQL.Parser
             new AggregateOperator("topk", ValueType.Scalar),
             new AggregateOperator("bottomk", ValueType.Scalar),
             new AggregateOperator("count_values", ValueType.String),
-            new AggregateOperator("quantile", ValueType.Scalar)
+            new AggregateOperator("quantile", ValueType.Scalar),
+            new AggregateOperator("limitk", ValueType.Scalar),
+            new AggregateOperator("limit_ratio", ValueType.Scalar)
         }.ToImmutableDictionary(k => k.Name, v => v, StringComparer.OrdinalIgnoreCase);
 
         public static string ToPromQl(this Operators.Binary op) => op switch
